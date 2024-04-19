@@ -236,6 +236,7 @@ class SAR_Wiki_Crawler:
             # de guardado
             total_files = math.ceil(document_limit / batch_size)
 
+        # PENSAR EN UN BUCLE WHILE
         # COMPLETAR
 
 
@@ -298,10 +299,6 @@ class SAR_Wiki_Crawler:
 
         self.start_crawling(initial_urls=urls, document_limit=document_limit, base_filename=base_filename,
                             batch_size=batch_size, max_depth_level=0)
-
-
-
-
 
 if __name__ == "__main__":
     raise Exception(
