@@ -157,7 +157,43 @@ class SAR_Wiki_Crawler:
 
         # COMPLETAR
 
-        return document
+        text = clean_text(text)         #Eliminamos lineas en blanco
+        diccionario = {'url': '',
+                       'title': '',
+                       'summary': '',
+                       'sections': []
+                      }
+        
+        diccionario['url'] = url
+        partes = self.title_sum_re.match(text)       #Sacamos el titulo, resumen y los apartados
+
+        if partes:
+            diccionario['title'] = partes.group('title')  #Si no esta vacio asigna el match de titulo con el titulo del diccionario
+            diccionario["summary"] = partes.group('summary')  #Si no esta vacio asigna el match del resumen con el resumen del diccionario
+            secciones = partes.group('rest')                  #Si no esta vacio asigna el match de rest con una var secciones que seguiremos desglosando
+           
+            for coinc in self.sections_re.finditer(secciones):
+                nombre = coinc.group('name')                            #Para todos los match con secciones sacamos el match del nombre de la seccion
+                texto = coinc.group('text')                             #Lo mismo con el match del texto
+                sub_secciones = coinc.group('rest')                     #Y las subsecciones
+
+                seccion_dict = {'name': nombre, 'text': texto, 'subsections': []}    #Creamos la entrada del diccionario de cada match 
+
+                for coinc_sub in self.subsections_re.finditer(sub_secciones):
+                    nombre_sub = coinc_sub.group('name')                             #Hacemos lo mismo para cada subseccion y las añadimos a la seccion
+                    texto_sub = coinc_sub.group('text')
+                    seccion_dict['subsections'].append({'name': nombre_sub, 'text': texto_sub})
+               
+                diccionario["sections"].append(seccion_dict)                          #Para cada match de seccion con sus parametros lo añadimos como entrada de "sections"
+
+            return diccionario
+    
+           
+        else:
+            return document
+        
+
+        
 
 
     def save_documents(self,
