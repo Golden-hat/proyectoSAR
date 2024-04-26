@@ -274,6 +274,30 @@ class SAR_Wiki_Crawler:
 
         # PENSAR EN UN BUCLE WHILE
         # COMPLETAR
+        while queue and total_documents_captured < document_limit:  #mientras haya direcciones y no superemos el maximo de documentos
+            depth, parent_url, content_url = hq.heappop(queue)      #sacamos los valores de la tupla para el elemento mas pequeño de la cola de prioridad
+            if self.is_valid_url(content_url) and content_url not in visited:   #si la url es valida (pagina de wikipedia en castellano) y no se ha visitado
+                    visited.add(content_url)                        #se añade la url a las visitadas
+                    content =self.get_wikipedia_entry_content(content_url)     #extraemos el contenido de la url
+                    urls = self.extract_links_from_content(content)               #obtenemos las otras url que puede haber en el contenido
+                    if urls is not None:                             #si hay alguna url, que la lista no este vacía
+                        if depth<=max_depth_level:                   #comprobamos que no nos pasemos de profundidad
+                            for url in urls:                         #vamos pasando por cada url de la lista 
+                                if url not in visited and self.is_valid_url(url):   #otra vez comprobamos que sea valida y que no ha sido visitada
+                                    hq.heappush(queue, (depth + 1, content_url, url))   #añadimos a la cola de prioridad
+
+                    dict = self.parse_wikipedia_textual_content(content, content_url)      #llamamos al otro método para generar el diccionario con el contenido
+                    documents.append(dict)                            #añadimos el diccionado generado a documents
+                    total_documents_captured += 1                     #sumamos 1 al total de documentos
+
+                    if batch_size is not None and len(documents) >= batch_size:     #si se ha introducido como parametro un batch size y la longitud de documents es mas grande
+                        self.save_documents(documents, base_filename, files_count)  #metodo para guardar la lista de diccionarios en memoria secundaria
+                        files_count += 1                              #sumamos 1 al numero de ficheros escritos
+                        documents.clear()                             #vaciamos la lista de diccionarios
+
+        if batch_size is None:                                                  #si no se habia introducido batch size
+            self.save_documents(documents, base_filename, files_count)          #guardamos en memoria secundaria toda la lista de una
+
 
 
     def wikipedia_crawling_from_url(self,
