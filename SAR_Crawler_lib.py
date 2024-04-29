@@ -167,32 +167,51 @@ class SAR_Wiki_Crawler:
         diccionario['url'] = url
         partes = self.title_sum_re.match(text)       #Sacamos el titulo, resumen y los apartados
 
+        
         if partes:
             diccionario['title'] = partes.group('title')  #Si no esta vacio asigna el match de titulo con el titulo del diccionario
             diccionario["summary"] = partes.group('summary')  #Si no esta vacio asigna el match del resumen con el resumen del diccionario
             secciones = partes.group('rest')                  #Si no esta vacio asigna el match de rest con una var secciones que seguiremos desglosando
-           
-            for coinc in self.sections_re.finditer(secciones):
-                nombre = coinc.group('name')                            #Para todos los match con secciones sacamos el match del nombre de la seccion
-                texto = coinc.group('text')                             #Lo mismo con el match del texto
-                sub_secciones = coinc.group('rest')                     #Y las subsecciones
-
-                seccion_dict = {'name': nombre, 'text': texto, 'subsections': []}    #Creamos la entrada del diccionario de cada match 
-
-                for coinc_sub in self.subsections_re.finditer(sub_secciones):
-                    nombre_sub = coinc_sub.group('name')                             #Hacemos lo mismo para cada subseccion y las añadimos a la seccion
-                    texto_sub = coinc_sub.group('text')
-                    seccion_dict['subsections'].append({'name': nombre_sub, 'text': texto_sub})
-               
-                diccionario["sections"].append(seccion_dict)                          #Para cada match de seccion con sus parametros lo añadimos como entrada de "sections"
-
-            return diccionario
     
-           
+
+            start_indices = []                                  #Creamos una lista de indices de inicio de secciones
+            for coinc in self.sections_re.finditer(secciones):
+                start= coinc.start() 
+                
+                start_indices.append(start)
+
+            for i in range(len(start_indices)):                #Para cada indice de inicio de seccion 
+
+                if (i+1) >= len(start_indices):                   #Si el indice siguiente es mayor que la longitud de la lista de indices
+                    section = secciones[start_indices[i]:]
+                else:
+                    section = secciones[start_indices[i]:start_indices[i+1]] 
+               
+                dic = self.section_re.match(section).groupdict()   
+                nombre, texto, sub_secciones = dic['name'], dic['text'], dic['rest']  #Sacamos el nombre, texto y subsecciones de cada match
+                seccion_dict = {'name': nombre, 'text': texto, 'subsections': []}
+                
+                start_indices_sub = []
+                for coinc in self.subsection_re.finditer(sub_secciones):
+                    start = coinc.start()
+                    start_indices_sub.append(start)
+                
+                for j in range(len(start_indices_sub)):
+                    if (j+1) >= len(start_indices_sub):
+                        subsection = sub_secciones[start_indices_sub[j]:]
+                    else:
+                        subsection = sub_secciones[start_indices_sub[j]:start_indices_sub[j+1]]
+                    
+                    dic_sub = self.subsection_re.match(subsection).groupdict()
+                    nombre_sub, texto_sub = dic_sub['name'], dic_sub['text']
+                    subseccion_dict = {'name': nombre_sub, 'text': texto_sub}
+                    seccion_dict['subsections'].append(subseccion_dict)
+                
+                diccionario['sections'].append(seccion_dict)
+        
+            return diccionario           
         else:
             return document
-        
-
         
 
 
