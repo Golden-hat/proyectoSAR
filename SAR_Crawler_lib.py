@@ -213,8 +213,6 @@ class SAR_Wiki_Crawler:
         else:
             return document
 
-
-
     def save_documents(self,
         documents: List[dict], base_filename: str,
         num_file: Optional[int] = None, total_files: Optional[int] = None
@@ -316,8 +314,6 @@ class SAR_Wiki_Crawler:
 
         if batch_size is None:                                                  #si no se habia introducido batch size
             self.save_documents(documents, base_filename, files_count)          #guardamos en memoria secundaria toda la lista de una
-
-
 
     def wikipedia_crawling_from_url(self,
         initial_url: str, document_limit: int, base_filename: str,
