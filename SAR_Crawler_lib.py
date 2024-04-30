@@ -163,56 +163,56 @@ class SAR_Wiki_Crawler:
                        'summary': '',
                        'sections': []
                       }
-        
+
         diccionario['url'] = url
         partes = self.title_sum_re.match(text)       #Sacamos el titulo, resumen y los apartados
 
-        
+
         if partes:
             diccionario['title'] = partes.group('title')  #Si no esta vacio asigna el match de titulo con el titulo del diccionario
             diccionario["summary"] = partes.group('summary')  #Si no esta vacio asigna el match del resumen con el resumen del diccionario
             secciones = partes.group('rest')                  #Si no esta vacio asigna el match de rest con una var secciones que seguiremos desglosando
-    
+
 
             start_indices = []                                  #Creamos una lista de indices de inicio de secciones
             for coinc in self.sections_re.finditer(secciones):
-                start= coinc.start() 
-                
+                start= coinc.start()
+
                 start_indices.append(start)
 
-            for i in range(len(start_indices)):                #Para cada indice de inicio de seccion 
+            for i in range(len(start_indices)):                #Para cada indice de inicio de seccion
 
                 if (i+1) >= len(start_indices):                   #Si el indice siguiente es mayor que la longitud de la lista de indices
                     section = secciones[start_indices[i]:]
                 else:
-                    section = secciones[start_indices[i]:start_indices[i+1]] 
-               
-                dic = self.section_re.match(section).groupdict()   
+                    section = secciones[start_indices[i]:start_indices[i+1]]
+
+                dic = self.section_re.match(section).groupdict()
                 nombre, texto, sub_secciones = dic['name'], dic['text'], dic['rest']  #Sacamos el nombre, texto y subsecciones de cada match
                 seccion_dict = {'name': nombre, 'text': texto, 'subsections': []}
-                
+
                 start_indices_sub = []
                 for coinc in self.subsection_re.finditer(sub_secciones):
                     start = coinc.start()
                     start_indices_sub.append(start)
-                
+
                 for j in range(len(start_indices_sub)):
                     if (j+1) >= len(start_indices_sub):
                         subsection = sub_secciones[start_indices_sub[j]:]
                     else:
                         subsection = sub_secciones[start_indices_sub[j]:start_indices_sub[j+1]]
-                    
+
                     dic_sub = self.subsection_re.match(subsection).groupdict()
                     nombre_sub, texto_sub = dic_sub['name'], dic_sub['text']
                     subseccion_dict = {'name': nombre_sub, 'text': texto_sub}
                     seccion_dict['subsections'].append(subseccion_dict)
-                
+
                 diccionario['sections'].append(seccion_dict)
-        
-            return diccionario           
+
+            return diccionario
         else:
             return document
-        
+
 
 
     def save_documents(self,
@@ -250,15 +250,15 @@ class SAR_Wiki_Crawler:
                 print(json.dumps(doc, ensure_ascii=True), file=ofile)
 
 
-    def start_crawling(self, 
+    def start_crawling(self,
                     initial_urls: List[str], document_limit: int,
                     base_filename: str, batch_size: Optional[int], max_depth_level: int,
-                    ):        
-         
+                    ):
 
-        """Comienza la captura de entradas de la Wikipedia a partir de una lista de urls válidas, 
+
+        """Comienza la captura de entradas de la Wikipedia a partir de una lista de urls válidas,
             termina cuando no hay urls en la cola o llega al máximo de documentos a capturar.
-        
+
         Args:
             initial_urls: Direcciones a artículos de la Wikipedia
             document_limit (int): Máximo número de documentos a capturar
@@ -297,12 +297,12 @@ class SAR_Wiki_Crawler:
             depth, parent_url, content_url = hq.heappop(queue)      #sacamos los valores de la tupla para el elemento mas pequeño de la cola de prioridad
             if self.is_valid_url(content_url) and content_url not in visited:   #si la url es valida (pagina de wikipedia en castellano) y no se ha visitado
                     visited.add(content_url)                        #se añade la url a las visitadas
-                    content =self.get_wikipedia_entry_content(content_url)     #extraemos el contenido de la url
-                    urls = self.extract_links_from_content(content)               #obtenemos las otras url que puede haber en el contenido
+                    content = self.get_wikipedia_entry_content(content_url)[0]     #extraemos el contenido de la url
+                    urls = self.get_wikipedia_entry_content(content_url)[1]               #obtenemos las otras url que puede haber en el contenido
                     if urls is not None:                             #si hay alguna url, que la lista no este vacía
                         if depth<=max_depth_level:                   #comprobamos que no nos pasemos de profundidad
-                            for url in urls:                         #vamos pasando por cada url de la lista 
-                                if url not in visited and self.is_valid_url(url):   #otra vez comprobamos que sea valida y que no ha sido visitada
+                            for url in urls:                         #vamos pasando por cada url de la lista
+                                if url not in visited and self.is_valid_url(url) and not url.startswith("/wiki/"):   #otra vez comprobamos que sea valida y que no ha sido visitada
                                     hq.heappush(queue, (depth + 1, content_url, url))   #añadimos a la cola de prioridad
 
                     dict = self.parse_wikipedia_textual_content(content, content_url)      #llamamos al otro método para generar el diccionario con el contenido
@@ -325,7 +325,7 @@ class SAR_Wiki_Crawler:
     ):
         """Captura un conjunto de entradas de la Wikipedia, hasta terminar
         o llegar al máximo de documentos a capturar.
-        
+
         Args:
             initial_url (str): Dirección a un artículo de la Wikipedia
             document_limit (int): Máximo número de documentos a capturar
