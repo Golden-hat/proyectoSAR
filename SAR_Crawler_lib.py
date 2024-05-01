@@ -244,12 +244,8 @@ class SAR_Wiki_Crawler:
             out_filename = base_filename
 
         with open(out_filename, "w", encoding="utf-8", newline="\n") as ofile:
-            print("[", file=ofile)
             for doc in documents:
                 print(json.dumps(doc, ensure_ascii=True), file=ofile)
-                if doc != documents[-1]:
-                    print(",", file=ofile)
-            print("]", file=ofile)
 
 
     def start_crawling(self,
@@ -289,7 +285,8 @@ class SAR_Wiki_Crawler:
         if batch_size is None:
             total_files = None
         else:
-            # Suponemos que vamos a poder alcanzar el límite para la nomenclatura de guardado
+            # Suponemos que vamos a poder alcanzar el límite para la nomenclatura
+            # de guardado
             total_files = math.ceil(document_limit / batch_size)
             base_filename = base_filename[:-5]                                          #eliminamos extensión de archivo json, que sabemos que tiene al final
 

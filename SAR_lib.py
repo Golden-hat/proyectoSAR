@@ -55,6 +55,9 @@ class SAR_Indexer:
         self.show_snippet = False # valor por defecto, se cambia con self.set_snippet()
         self.use_stemming = False # valor por defecto, se cambia con self.set_stemming()
         self.use_ranking = False  # valor por defecto, se cambia con self.set_ranking()
+        # añadimos contadores que nos ayudarán a imprimir por pantalla los stats de la indexación
+        self.counterFiles = 0
+        self.countArt = 0
 
 
     ###############################
@@ -176,6 +179,7 @@ class SAR_Indexer:
         if file_or_dir.is_file():
             # is a file
             self.index_file(root)
+            self.counterFiles += 1
         elif file_or_dir.is_dir():
             # is a directory
             for d, _, files in os.walk(root):
@@ -183,6 +187,7 @@ class SAR_Indexer:
                     if filename.endswith('.json'):
                         fullname = os.path.join(d, filename)
                         self.index_file(fullname)
+                        self.counterFiles += 1
         else:
             print(f"ERROR:{root} is not a file nor directory!", file=sys.stderr)
             sys.exit(-1)
@@ -234,18 +239,19 @@ class SAR_Indexer:
         """
         for i, line in enumerate(open(filename)):
             j = self.parse_article(line)
-
-            artid = len(self.articles)          ##identificador unico de articulo, si empieza en 1 cambiar por len()+1         
+            self.countArt += 1
+            artid = len(self.articles)                             #identificador unico de articulo, si empieza en 1 cambiar por len()+1
+            print(artid)      
       
             if(not self.already_in_index(j)):
                 self.articles[artid] = (len(self.docs),i)          #metemos el articulo en el diccionario si no estaba ya indexado
             
-                txt = j["all"]                        #asignamos a txt todo el texto del articulo j
+                txt = j['all']                        #asignamos a txt todo el texto del articulo j
                 txt = txt.lower()                     #lo pasamos a minuscula
                 txt = self.tokenizer.split(txt)       #eliminamos todos los terminos no alfanumericos
 
                 for term in txt:
-                    self.index[term].append(artid)      #para cada entrada (termino) del dicc vamos añadiendo los articulos en los que salen
+                    self.index[term] = artid      #para cada entrada (termino) del dicc vamos añadiendo los articulos en los que salen
 
         self.docs[len(self.docs)] = os.path.dirname(filename)   #añadimos el documento como procesado en el diccionario
 
@@ -324,9 +330,14 @@ class SAR_Indexer:
         
         """
         pass
-        ########################################
-        ## COMPLETAR PARA TODAS LAS VERSIONES ##
-        ########################################
+        print("========================================")
+        print("Number of indexed files: ", self.counterFiles)
+        print("----------------------------------------")
+        print("Number of indexed articles: ", self.countArt)
+        print("----------------------------------------")
+        print("TOKENS:")
+        print("\t# of tokens in 'all': ", len(self.index))
+        print("========================================")
 
         
 
