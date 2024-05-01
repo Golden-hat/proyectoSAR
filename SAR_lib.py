@@ -235,17 +235,19 @@ class SAR_Indexer:
         for i, line in enumerate(open(filename)):
             j = self.parse_article(line)
 
+            artid = len(self.articles)          ##identificador unico de articulo, si empieza en 1 cambiar por len()+1         
+      
+            if(not self.already_in_index(j)):
+                self.articles[artid] = (len(self.docs),i)          #metemos el articulo en el diccionario si no estaba ya indexado
+            
+                txt = j["all"]                        #asignamos a txt todo el texto del articulo j
+                txt = txt.lower()                     #lo pasamos a minuscula
+                txt = self.tokenizer.split(txt)       #eliminamos todos los terminos no alfanumericos
 
-        #
-        # 
-        # En la version basica solo se debe indexar el contenido "article"
-        #
-        #
-        #
-        #################
-        ### COMPLETAR ###
-        #################
+                for term in txt:
+                    self.index[term].append(artid)      #para cada entrada (termino) del dicc vamos añadiendo los articulos en los que salen
 
+        self.docs[len(self.docs)] = os.path.dirname(filename)   #añadimos el documento como procesado en el diccionario
 
 
     def set_stemming(self, v:bool):
