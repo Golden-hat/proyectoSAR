@@ -241,7 +241,6 @@ class SAR_Indexer:
             j = self.parse_article(line)
             self.countArt += 1
             artid = len(self.articles)                             #identificador unico de articulo, si empieza en 1 cambiar por len()+1
-            print(artid)      
       
             if(not self.already_in_index(j)):
                 self.articles[artid] = (len(self.docs),i)          #metemos el articulo en el diccionario si no estaba ya indexado
