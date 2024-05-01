@@ -157,7 +157,7 @@ class SAR_Wiki_Crawler:
 
         # COMPLETAR
 
-        text = clean_text(text)         #Eliminamos lineas en blanco
+        text = clean_text(text) 
         diccionario = {'url': '',
                        'title': '',
                        'summary': '',
@@ -165,13 +165,13 @@ class SAR_Wiki_Crawler:
                       }
 
         diccionario['url'] = url
-        partes = self.title_sum_re.match(text)       #Sacamos el titulo, resumen y los apartados
+        partes = self.title_sum_re.match(text)                  #Sacamos el titulo, resumen y los apartados
 
 
         if partes:
-            diccionario['title'] = partes.group('title')  #Si no esta vacio asigna el match de titulo con el titulo del diccionario
-            diccionario["summary"] = partes.group('summary')  #Si no esta vacio asigna el match del resumen con el resumen del diccionario
-            secciones = partes.group('rest')                  #Si no esta vacio asigna el match de rest con una var secciones que seguiremos desglosando
+            diccionario['title'] = partes.group('title')        #Si no esta vacio asigna el match de titulo con el titulo del diccionario
+            diccionario["summary"] = partes.group('summary')    #Si no esta vacio asigna el match del resumen con el resumen del diccionario
+            secciones = partes.group('rest')                    #Si no esta vacio asigna el match de rest con una var secciones que seguiremos desglosando
 
 
             start_indices = []                                  #Creamos una lista de indices de inicio de secciones
@@ -180,15 +180,15 @@ class SAR_Wiki_Crawler:
 
                 start_indices.append(start)
 
-            for i in range(len(start_indices)):                #Para cada indice de inicio de seccion
+            for i in range(len(start_indices)):                 #Para cada indice de inicio de seccion
 
-                if (i+1) >= len(start_indices):                   #Si el indice siguiente es mayor que la longitud de la lista de indices
+                if (i+1) >= len(start_indices):                 #Si el indice siguiente es mayor que la longitud de la lista de indices
                     section = secciones[start_indices[i]:]
                 else:
                     section = secciones[start_indices[i]:start_indices[i+1]]
 
                 dic = self.section_re.match(section).groupdict()
-                nombre, texto, sub_secciones = dic['name'], dic['text'], dic['rest']  #Sacamos el nombre, texto y subsecciones de cada match
+                nombre, texto, sub_secciones = dic['name'], dic['text'], dic['rest']
                 seccion_dict = {'name': nombre, 'text': texto, 'subsections': []}
 
                 start_indices_sub = []
@@ -291,29 +291,29 @@ class SAR_Wiki_Crawler:
 
         # PENSAR EN UN BUCLE WHILE
         # COMPLETAR
-        while queue and total_documents_captured < document_limit:  #mientras haya direcciones y no superemos el maximo de documentos
-            depth, parent_url, content_url = hq.heappop(queue)      #sacamos los valores de la tupla para el elemento mas pequeño de la cola de prioridad
-            if self.is_valid_url(content_url) and content_url not in visited:   #si la url es valida (pagina de wikipedia en castellano) y no se ha visitado
-                    visited.add(content_url)                        #se añade la url a las visitadas
-                    content = self.get_wikipedia_entry_content(content_url)[0]     #extraemos el contenido de la url
-                    urls = self.get_wikipedia_entry_content(content_url)[1]               #obtenemos las otras url que puede haber en el contenido
-                    if urls is not None:                             #si hay alguna url, que la lista no este vacía
-                        if depth<=max_depth_level:                   #comprobamos que no nos pasemos de profundidad
-                            for url in urls:                         #vamos pasando por cada url de la lista
-                                if url not in visited and self.is_valid_url(url) and not url.startswith("/wiki/"):   #otra vez comprobamos que sea valida y que no ha sido visitada
+        while queue and total_documents_captured < document_limit:                      #mientras haya direcciones y no superemos el maximo de documentos
+            depth, parent_url, content_url = hq.heappop(queue)                          #sacamos los valores de la tupla para el elemento mas pequeño de la cola de prioridad
+            if self.is_valid_url(content_url) and content_url not in visited:           #si la url es valida (pagina de wikipedia en castellano) y no se ha visitado
+                    visited.add(content_url)                                            #se añade la url a las visitadas
+                    content = self.get_wikipedia_entry_content(content_url)[0]          #extraemos el contenido de la url
+                    urls = self.get_wikipedia_entry_content(content_url)[1]             #obtenemos las otras url que puede haber en el contenido
+                    if urls is not None:                                                #si hay alguna url, que la lista no este vacía
+                        if depth<=max_depth_level:                                      #comprobamos que no nos pasemos de profundidad
+                            for url in urls:                                            #vamos pasando por cada url de la lista
+                                if url not in visited and self.is_valid_url(url) and not url.startswith("/wiki/"):
                                     hq.heappush(queue, (depth + 1, content_url, url))   #añadimos a la cola de prioridad
 
-                    dict = self.parse_wikipedia_textual_content(content, content_url)      #llamamos al otro método para generar el diccionario con el contenido
-                    documents.append(dict)                            #añadimos el diccionado generado a documents
-                    total_documents_captured += 1                     #sumamos 1 al total de documentos
+                    dict = self.parse_wikipedia_textual_content(content, content_url)   #llamamos al otro método para generar el diccionario con el contenido
+                    documents.append(dict)                                              #añadimos el diccionado generado a documents
+                    total_documents_captured += 1                                       #sumamos 1 al total de documentos
 
-                    if batch_size is not None and len(documents) >= batch_size:     #si se ha introducido como parametro un batch size y la longitud de documents es mas grande
-                        self.save_documents(documents, base_filename, files_count)  #metodo para guardar la lista de diccionarios en memoria secundaria
-                        files_count += 1                              #sumamos 1 al numero de ficheros escritos
-                        documents.clear()                             #vaciamos la lista de diccionarios
+                    if batch_size is not None and len(documents) >= batch_size:         #si se ha introducido como parametro un batch size y la longitud de documents es mas grande
+                        self.save_documents(documents, base_filename, files_count)      #metodo para guardar la lista de diccionarios en memoria secundaria
+                        files_count += 1                                                #sumamos 1 al numero de ficheros escritos
+                        documents.clear()                                               #vaciamos la lista de diccionarios
 
-        if batch_size is None:                                                  #si no se habia introducido batch size
-            self.save_documents(documents, base_filename, files_count)          #guardamos en memoria secundaria toda la lista de una
+        if batch_size is None:                                                          #si no se habia introducido batch size
+            self.save_documents(documents, base_filename, files_count)                  #guardamos en memoria secundaria toda la lista de una
 
     def wikipedia_crawling_from_url(self,
         initial_url: str, document_limit: int, base_filename: str,
