@@ -244,8 +244,12 @@ class SAR_Wiki_Crawler:
             out_filename = base_filename
 
         with open(out_filename, "w", encoding="utf-8", newline="\n") as ofile:
+            print("[", file=ofile)
             for doc in documents:
                 print(json.dumps(doc, ensure_ascii=True), file=ofile)
+                if doc != documents[-1]:
+                    print(",", file=ofile)
+            print("]", file=ofile)
 
 
     def start_crawling(self,
@@ -274,44 +278,48 @@ class SAR_Wiki_Crawler:
         queue = [(0, "", url) for url in to_process]
         hq.heapify(queue)
         # Buffer de documentos capturados
-        documents: List[dict] = []
+        documents: List[dict] = [] # type: ignore
         # Contador del número de documentos capturados
         total_documents_captured = 0
         # Contador del número de ficheros escritos
         files_count = 0
 
-        # En caso de que no utilicemos bach_size, asignamos None a total_files
+        # En caso de que no utilicemos batch_size, asignamos None a total_files
         # así el guardado no modificará el nombre del fichero base
         if batch_size is None:
             total_files = None
         else:
-            # Suponemos que vamos a poder alcanzar el límite para la nomenclatura
-            # de guardado
+            # Suponemos que vamos a poder alcanzar el límite para la nomenclatura de guardado
             total_files = math.ceil(document_limit / batch_size)
+            base_filename = base_filename[:-5]                                          #eliminamos extensión de archivo json, que sabemos que tiene al final
 
-        # PENSAR EN UN BUCLE WHILE
-        # COMPLETAR
         while queue and total_documents_captured < document_limit:                      #mientras haya direcciones y no superemos el maximo de documentos
             depth, parent_url, content_url = hq.heappop(queue)                          #sacamos los valores de la tupla para el elemento mas pequeño de la cola de prioridad
-            if self.is_valid_url(content_url) and content_url not in visited:           #si la url es valida (pagina de wikipedia en castellano) y no se ha visitado
+            if self.is_valid_url(content_url) and content_url not in visited:
+                    print(content_url)                                                  #si la url es valida (pagina de wikipedia en castellano) y no se ha visitado
                     visited.add(content_url)                                            #se añade la url a las visitadas
                     content = self.get_wikipedia_entry_content(content_url)[0]          #extraemos el contenido de la url
                     urls = self.get_wikipedia_entry_content(content_url)[1]             #obtenemos las otras url que puede haber en el contenido
+                    
                     if urls is not None:                                                #si hay alguna url, que la lista no este vacía
                         if depth<=max_depth_level:                                      #comprobamos que no nos pasemos de profundidad
                             for url in urls:                                            #vamos pasando por cada url de la lista
-                                if url not in visited and self.is_valid_url(url) and not url.startswith("/wiki/"):
+                                url = "https://es.wikipedia.org"+ url
+                                if url not in visited and self.is_valid_url(url):
                                     hq.heappush(queue, (depth + 1, content_url, url))   #añadimos a la cola de prioridad
 
                     dict = self.parse_wikipedia_textual_content(content, content_url)   #llamamos al otro método para generar el diccionario con el contenido
                     documents.append(dict)                                              #añadimos el diccionado generado a documents
                     total_documents_captured += 1                                       #sumamos 1 al total de documentos
 
-                    if batch_size is not None and len(documents) >= batch_size:         #si se ha introducido como parametro un batch size y la longitud de documents es mas grande
-                        self.save_documents(documents, base_filename, files_count)      #metodo para guardar la lista de diccionarios en memoria secundaria
-                        files_count += 1                                                #sumamos 1 al numero de ficheros escritos
-                        documents.clear()                                               #vaciamos la lista de diccionarios
-
+                    if batch_size is not None and total_documents_captured%batch_size==0:
+                        files_count += 1
+                        self.save_documents(documents, base_filename+"_"+str(files_count)+"_"+str(total_files)+".json", files_count)                                                                                    #sumamos 1 al numero de ficheros escritos
+                        documents.clear()
+        if batch_size is not None and files_count != total_files:
+            files_count += 1
+            self.save_documents(documents, base_filename+"_"+str(files_count)+"_"+str(total_files)+".json", files_count)
+            documents.clear()
         if batch_size is None:                                                          #si no se habia introducido batch size
             self.save_documents(documents, base_filename, files_count)                  #guardamos en memoria secundaria toda la lista de una
 
