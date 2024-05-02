@@ -378,9 +378,6 @@ class SAR_Indexer:
         ## COMPLETAR PARA TODAS LAS VERSIONES ##
         ########################################
 
-
-
-
     def get_posting(self, term:str, field:Optional[str]=None):
         """
 
@@ -497,13 +494,25 @@ class SAR_Indexer:
         return: posting list con los artid incluidos en p1 y p2
 
         """
+        AND = []
+        # Ordenamos las listas (sólo por si acaso)
+        p1 = sorted(p1)
+        p2 = sorted(p2)   
         
-        pass
-        ########################################
-        ## COMPLETAR PARA TODAS LAS VERSIONES ##
-        ########################################
+        # definimos los índices de la iteración 
+        index1 = 0
+        index2 = 0
+        while index1 != len(p1) and index2 != len(p2):
+            if p1[index1] == p2[index2]:
+                AND.append(p1[index1])
+                index1 += 1
+                index2 += 1
+            elif p1[index1] > p2[index2]:
+                index2 += 1
+            else:
+                index1 += 1
 
-
+        return AND
 
     def or_posting(self, p1:list, p2:list):
         """
@@ -517,11 +526,26 @@ class SAR_Indexer:
         return: posting list con los artid incluidos de p1 o p2
 
         """
+        OR = []
+        # Ordenamos las listas (sólo por si acaso)
+        p1 = sorted(p1)
+        p2 = sorted(p2) 
+        
+        # definimos los índices de la iteración 
+        index1 = 0
+        index2 = 0
+        while index1 != len(p1) and index2 != len(p2):
+            if p1[index1] < p2[index2]:
+                OR.append(p1[index1])
+                index1 += 1
+            elif p1[index1] > p2[index2]:
+                OR.append(p2[index2])
+                index2 += 1
+            else:
+                index1 += 1
+                index2 += 1
 
-        pass
-        ########################################
-        ## COMPLETAR PARA TODAS LAS VERSIONES ##
-        ########################################
+        return OR
 
 
     def minus_posting(self, p1, p2):
