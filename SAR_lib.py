@@ -399,7 +399,10 @@ class SAR_Indexer:
         ########################################
         ## COMPLETAR PARA TODAS LAS VERSIONES ##
         ########################################
-        pass
+        if(field is None):
+            res = self.index["term"]
+
+        return res                                              ##!!!!!FALTA ACABAR PARA CUANDO FIELD != OPCIONAL
 
 
 
@@ -567,6 +570,19 @@ class SAR_Indexer:
         ########################################################
         ## COMPLETAR PARA TODAS LAS VERSIONES SI ES NECESARIO ##
         ########################################################
+        
+        p1 = sorted(p1)      #ordenamos las dos listas
+        p2 = sorted(p2) 
+
+        DEL = self.and_posting(p1,p2)        #las palabras del and son las que tendremos que eliminar de p1
+
+        for term in p1:
+            if term in DEL: p1.remove(term)    
+        
+         
+        
+        return p1
+
 
 
 
