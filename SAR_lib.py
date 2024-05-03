@@ -475,11 +475,16 @@ class SAR_Indexer:
 
         """
         
-        pass
         ########################################
         ## COMPLETAR PARA TODAS LAS VERSIONES ##
         ########################################
+        reverse = []
+        noticias= self.articles.keys()
+        for index in noticias:
+            if index not in p:
+                reverse.append(p[index])
 
+        return reverse
 
 
     def and_posting(self, p1:list, p2:list):
@@ -621,11 +626,13 @@ class SAR_Indexer:
         return: el numero de artículo recuperadas, para la opcion -T
 
         """
-        pass
+        
         ################
         ## COMPLETAR  ##
         ################
-
+        r = self.solve_query(query)
+        print('query: ' + query)
+        print('num results: ' + len(r))
 
 
 
