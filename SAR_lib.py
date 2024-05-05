@@ -191,9 +191,11 @@ class SAR_Indexer:
             print(f"ERROR:{root} is not a file nor directory!", file=sys.stderr)
             sys.exit(-1)
 
-        ##########################################
-        ## COMPLETAR PARA FUNCIONALIDADES EXTRA ##
-        ##########################################
+        if self.stemming:
+            self.make_stemming()
+        # Si se activa la función de permuterm
+        if self.permuterm:
+            self.make_permuterm()
         
         
     def parse_article(self, raw_line:str) -> Dict[str, str]:
@@ -323,24 +325,41 @@ class SAR_Indexer:
 
 
         """
-        if self.multifield:                                             #comprobamos si tenemos que hacer una indexación multicampo...
-            for field, allow in self.fields:                            #en ese caso, hacemos un índice por campo           
-                for key in self.index[field]:
-                    stem = self.stemmer.stem(key)
-                    stemList = self.get_stemming(key, field)           
+        # if self.multifield:                                             #comprobamos si tenemos que hacer una indexación multicampo...
+        #     for field, allow in self.fields:                            #en ese caso, hacemos un índice por campo           
+        #         for key in self.index[field]:
+        #             stem = self.stemmer.stem(key)
+        #             stemList = self.get_stemming(key, field)            #esto está mal porque lo que queremos es construir una lista con palabras que empiecen por el stem
 
-                    if stem not in self.sindex[field]:
-                        self.sindex[field][stem] = []
-                        self.sindex[field][stem].append(stemList)
+        #             if stem not in self.sindex[field]:
+        #                 self.sindex[field][stem] = []
+        #                 self.sindex[field][stem].append(stemList)
+        # else:
+        #    for key in self.index['all']:
+        #         stem = self.stemmer.stem(key)
+        #         stemList = self.get_stemming(key, 'all')           
+
+        #         if stem not in self.sindex['all']:
+        #             self.sindex['all'][stem] = []
+        #             self.sindex['all'][stem].append(stemList)
+
+        if self.multifield:
+            multifield = ["all", "title", "summary", "section-name", 'url']
         else:
-           for key in self.index['all']:
+            multifield = ['all']
+
+        for field in multifield:
+            # Se aplica stemming a cada token del self.index[field] y se añade al indice de stems
+            # En este caso solo se guarda la noticia, no la posición
+            for key in self.index[field]:
                 stem = self.stemmer.stem(key)
-                stemList = self.get_stemming(key, 'all')           
-
-                if stem not in self.sindex['all']:
-                    self.sindex['all'][stem] = []
-                    self.sindex['all'][stem].append(stemList) 
-
+                if stem not in self.sindex[field]:
+                    self.sindex[field][stem] = [key]
+                else:
+                    if key not in self.sindex[field][stem]:
+                        self.sindex[field][stem] += [key] 
+        
+        print(self.sindex['summary'])
 
     
     def make_permuterm(self):
@@ -382,7 +401,6 @@ class SAR_Indexer:
             print("\t# of tokens in 'all': ", len(self.index['all']))
 
         if self.permuterm:
-            self.make_permuterm()
             print("----------------------------------------")
             if not self.multifield:
                 print("\t# of tokens in 'all': ", len(self.sindex['all']))
@@ -395,7 +413,6 @@ class SAR_Indexer:
                 print("\t# of tokens in 'url': ", len(self.ptindex['url']))
 
         if self.stemming:
-            self.make_stemming()
             print("----------------------------------------")
             if not self.multifield:
                 print("STEMMING:")
@@ -505,22 +522,15 @@ class SAR_Indexer:
         return: posting list
 
         """
-        postingList = []
         stem = self.stemmer.stem(term)
-        if field is None:
-            searchIn = 'all'
-        else:
-            searchIn = field
-        for key in self.index[searchIn]:
-            if(key[:len(stem)] == stem):
-                postingList += self.index[searchIn][key]
+        res = []
 
-        unique_list = []
-        for item in postingList:
-            if item not in unique_list:
-                unique_list.append(item)
-
-        return unique_list
+        if stem in self.sindex[field]:
+            for token in self.sindex[field][stem]:
+                # Se utiliza el OR propio por eficiencia
+                res = self.or_posting(
+                    res, list(self.index[field][token].keys()))
+        return res
 
         ####################################################
         ## COMPLETAR PARA FUNCIONALIDAD EXTRA DE STEMMING ##
