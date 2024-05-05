@@ -43,8 +43,8 @@ class SAR_Indexer:
 
         """
         self.urls = set() # hash para las urls procesadas,
-        self.index = {} # hash para el indice invertido de terminos --> clave: termino, valor: posting list
-        self.sindex = {} # hash para el indice invertido de stems --> clave: stem, valor: lista con los terminos que tienen ese stem
+        self.index = {'all':{},'title':{}, 'summary':{},'section-name':{},'url':{}} # hash para el indice invertido de terminos --> clave: termino, valor: posting list
+        self.sindex = {'all':{},'title':{}, 'summary':{},'section-name':{},'url':{}} # hash para el indice invertido de stems --> clave: stem, valor: lista con los terminos que tienen ese stem
         self.ptindex = {} # hash para el indice permuterm.
         self.docs = {} # diccionario de terminos --> clave: entero(docid),  valor: ruta del fichero.
         self.weight = {} # hash de terminos para el pesado, ranking de resultados.
@@ -57,7 +57,6 @@ class SAR_Indexer:
         self.use_ranking = False  # valor por defecto, se cambia con self.set_ranking()
         # añadimos contadores que nos ayudarán a imprimir por pantalla los stats de la indexación
         self.counterFiles = 0
-        self.countArt = 0
 
 
     ###############################
@@ -239,24 +238,47 @@ class SAR_Indexer:
         """
         for i, line in enumerate(open(filename)):
             j = self.parse_article(line)
-            self.countArt += 1
-            artid = len(self.articles) + 1                         #identificador unico de articulo, si empieza en 1 cambiar por len()+1
-      
-            if(not self.already_in_index(j)):
-                self.articles[artid] = (len(self.docs),i)          #metemos el articulo en el diccionario si no estaba ya indexado
-            
-                txt = j['all']                        #asignamos a txt todo el texto del articulo j
-                txt = txt.lower()                     #lo pasamos a minuscula
-                txt = self.tokenizer.split(txt)       #eliminamos todos los terminos no alfanumericos
+            artid = len(self.articles) + 1    
+            if self.multifield:                                             #comprobamos si tenemos que hacer una indexación multicampo...
+                for field, allow in self.fields:                            #en ese caso, hacemos un índice por campo           
+                    if(not self.already_in_index(j)):
+                        self.articles[artid] = (len(self.docs),i)           #metemos el articulo en el diccionario si no estaba ya indexado
+                    
+                        txt = j[field]                                      #asignamos a txt todo el texto del articulo j
+                        if allow: 
+                            txt = txt.lower()                               #lo pasamos a minuscula
+                            txt = self.tokenizer.split(txt)                 #eliminamos todos los terminos no alfanumericos si el campo lo permite
+                        
+                            for term in txt:                                #asociamos una lista a cada término
+                                if term not in self.index[field]:
+                                    self.index[field][term] = []
+                            for term in txt:
+                                if artid not in self.index[field][term]: 
+                                    self.index[field][term].append(artid)   #para cada entrada (termino) del dicc vamos añadiendo los articulos en los que salen
+                        else:                                               #tratamiento especial para los términos no tokenizados
+                            if txt not in self.index[field]:
+                                self.index[field][txt] = []
+                            if txt not in self.index[field][txt]: 
+                                self.index[field][txt].append(artid) 
+            else:                                      
+                j = self.parse_article(line)
+                artid = len(self.articles) + 1                         #identificador unico de articulo, si empieza en 1 cambiar por len()+1
+        
+                if(not self.already_in_index(j)):
+                    self.articles[artid] = (len(self.docs),i)          #metemos el articulo en el diccionario si no estaba ya indexado
                 
-                for term in txt:                      #asociamos una lista a cada término
-                    if term not in self.index:
-                        self.index[term] = []
-                for term in txt:
-                    if artid not in self.index[term]: 
-                        self.index[term].append(artid)      #para cada entrada (termino) del dicc vamos añadiendo los articulos en los que salen
+                    txt = j['all']                                     #asignamos a txt todo el texto del articulo j
+                    txt = txt.lower()                                  #lo pasamos a minuscula
+                    txt = self.tokenizer.split(txt)                    #eliminamos todos los terminos no alfanumericos si el campo lo permite
+                    
+                    for term in txt:                                   #asociamos una lista a cada término
+                        if term not in self.index['all']:
+                            self.index['all'][term] = []
+                    for term in txt:
+                        if artid not in self.index['all'][term]: 
+                            self.index['all'][term].append(artid)      #para cada entrada (termino) del dicc vamos añadiendo los articulos en los que salen
 
-        print(self.index)
+        # print(self.index)
         self.docs[len(self.docs)] = os.path.dirname(filename)   #añadimos el documento como procesado en el diccionario
 
 
@@ -301,11 +323,23 @@ class SAR_Indexer:
 
 
         """
-        
-        pass
-        ####################################################
-        ## COMPLETAR PARA FUNCIONALIDAD EXTRA DE STEMMING ##
-        ####################################################
+        if self.multifield:                                             #comprobamos si tenemos que hacer una indexación multicampo...
+            for field, allow in self.fields:                            #en ese caso, hacemos un índice por campo           
+                for key in self.index[field]:
+                    stem = self.stemmer.stem(key)
+                    stemList = self.get_stemming(key, field)           
+
+                    if stem not in self.sindex[field]:
+                        self.sindex[field][stem] = []
+                        self.sindex[field][stem].append(stemList)
+        else:
+           for key in self.index['all']:
+                stem = self.stemmer.stem(key)
+                stemList = self.get_stemming(key, 'all')           
+
+                if stem not in self.sindex['all']:
+                    self.sindex['all'][stem] = []
+                    self.sindex['all'][stem].append(stemList) 
 
 
     
@@ -324,8 +358,6 @@ class SAR_Indexer:
         ####################################################
 
 
-
-
     def show_stats(self):
         """
         NECESARIO PARA TODAS LAS VERSIONES
@@ -336,14 +368,47 @@ class SAR_Indexer:
         print("========================================")
         print("Number of indexed files: ", self.counterFiles)
         print("----------------------------------------")
-        print("Number of indexed articles: ", self.countArt)
+        print("Number of indexed articles: ", len(self.index['url']))
         print("----------------------------------------")
-        print("TOKENS:")
-        print("\t# of tokens in 'all': ", len(self.index))
+        if self.multifield: 
+            print("TOKENS:")
+            print("\t# of tokens in 'all': ", len(self.index['all']))
+            print("\t# of tokens in 'title': ", len(self.index['title']))
+            print("\t# of tokens in 'summary': ", len(self.index['summary']))
+            print("\t# of tokens in 'section': ", len(self.index['section-name']))
+            print("\t# of tokens in 'url': ", len(self.index['url']))
+        else:
+            print("TOKENS:")
+            print("\t# of tokens in 'all': ", len(self.index['all']))
+
+        if self.permuterm:
+            self.make_permuterm()
+            print("----------------------------------------")
+            if not self.multifield:
+                print("\t# of tokens in 'all': ", len(self.sindex['all']))
+            else:
+                print("TOKENS:")
+                print("\t# of tokens in 'all': ", len(self.ptindex['all']))
+                print("\t# of tokens in 'title': ", len(self.ptindex['title']))
+                print("\t# of tokens in 'summary': ", len(self.ptindex['summary']))
+                print("\t# of tokens in 'section': ", len(self.ptindex['section-name']))
+                print("\t# of tokens in 'url': ", len(self.ptindex['url']))
+
+        if self.stemming:
+            self.make_stemming()
+            print("----------------------------------------")
+            if not self.multifield:
+                print("STEMMING:")
+                print("\t# of stems in 'all': ", len(self.sindex['all']))
+            else:
+                print("STEMMING:")
+                print("\t# of stems in 'all': ", len(self.sindex['all']))
+                print("\t# of stems in 'title': ", len(self.sindex['title']))
+                print("\t# of stems in 'summary': ", len(self.sindex['summary']))
+                print("\t# of stems in 'section': ", len(self.sindex['section-name']))
+                print("\t# of stems in 'url': ", len(self.sindex['url']))
+    
         print("========================================")
-
-        
-
 
 
     #################################
@@ -382,6 +447,7 @@ class SAR_Indexer:
         ## COMPLETAR PARA TODAS LAS VERSIONES ##
         ########################################
 
+
     def get_posting(self, term:str, field:Optional[str]=None):
         """
 
@@ -409,7 +475,6 @@ class SAR_Indexer:
         return res                                              ##!!!!!FALTA ACABAR PARA CUANDO FIELD != OPCIONAL
 
 
-
     def get_positionals(self, terms:str, index):
         """
 
@@ -435,17 +500,32 @@ class SAR_Indexer:
         NECESARIO PARA LA AMPLIACION DE STEMMING
 
         param:  "term": termino para recuperar la posting list de su stem.
-                "field": campo sobre el que se debe recuperar la posting list, solo necesario se se hace la ampliacion de multiples indices
+                "field": campo sobre el que se debe recuperar la posting list, solo necesario si se hace la ampliacion de multiples indices
 
         return: posting list
 
         """
-        
+        postingList = []
         stem = self.stemmer.stem(term)
+        if field is None:
+            searchIn = 'all'
+        else:
+            searchIn = field
+        for key in self.index[searchIn]:
+            if(key[:len(stem)] == stem):
+                postingList += self.index[searchIn][key]
+
+        unique_list = []
+        for item in postingList:
+            if item not in unique_list:
+                unique_list.append(item)
+
+        return unique_list
 
         ####################################################
         ## COMPLETAR PARA FUNCIONALIDAD EXTRA DE STEMMING ##
         ####################################################
+
 
     def get_permuterm(self, term:str, field:Optional[str]=None):
         """
@@ -464,7 +544,6 @@ class SAR_Indexer:
         ## COMPLETAR PARA FUNCIONALIDAD EXTRA PERMUTERM ##
         ##################################################
         pass
-
 
 
     def reverse_posting(self, p:list):
