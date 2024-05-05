@@ -240,7 +240,7 @@ class SAR_Indexer:
         for i, line in enumerate(open(filename)):
             j = self.parse_article(line)
             self.countArt += 1
-            artid = len(self.articles)                             #identificador unico de articulo, si empieza en 1 cambiar por len()+1
+            artid = len(self.articles) + 1                         #identificador unico de articulo, si empieza en 1 cambiar por len()+1
       
             if(not self.already_in_index(j)):
                 self.articles[artid] = (len(self.docs),i)          #metemos el articulo en el diccionario si no estaba ya indexado
@@ -248,10 +248,15 @@ class SAR_Indexer:
                 txt = j['all']                        #asignamos a txt todo el texto del articulo j
                 txt = txt.lower()                     #lo pasamos a minuscula
                 txt = self.tokenizer.split(txt)       #eliminamos todos los terminos no alfanumericos
-
+                
+                for term in txt:                      #asociamos una lista a cada término
+                    if term not in self.index:
+                        self.index[term] = []
                 for term in txt:
-                    self.index[term] = artid      #para cada entrada (termino) del dicc vamos añadiendo los articulos en los que salen
+                    if artid not in self.index[term]: 
+                        self.index[term].append(artid)      #para cada entrada (termino) del dicc vamos añadiendo los articulos en los que salen
 
+        print(self.index)
         self.docs[len(self.docs)] = os.path.dirname(filename)   #añadimos el documento como procesado en el diccionario
 
 
@@ -328,7 +333,6 @@ class SAR_Indexer:
         Muestra estadisticas de los indices
         
         """
-        pass
         print("========================================")
         print("Number of indexed files: ", self.counterFiles)
         print("----------------------------------------")
@@ -477,10 +481,6 @@ class SAR_Indexer:
         return: posting list con todos los artid exceptos los contenidos en p
 
         """
-        
-        ########################################
-        ## COMPLETAR PARA TODAS LAS VERSIONES ##
-        ########################################
         reverse = []
         noticias= self.articles.keys()
         for index in noticias:
@@ -522,7 +522,7 @@ class SAR_Indexer:
 
         return AND
 
-    def or_posting(self, p1:list, p2:list):
+    def or_posting(p1:list, p2:list):
         """
         NECESARIO PARA TODAS LAS VERSIONES
 
@@ -550,8 +550,17 @@ class SAR_Indexer:
                 OR.append(p2[index2])
                 index2 += 1
             else:
+                OR.append(p1[index2])
                 index1 += 1
                 index2 += 1
+
+        while index1 < len(p1):
+            OR.append(p1[index1])
+            index1 += 1
+
+        while index2 < len(p2):
+            OR.append(p2[index2])
+            index2 += 1
 
         return OR
 
@@ -569,29 +578,14 @@ class SAR_Indexer:
         return: posting list con los artid incluidos de p1 y no en p2
 
         """
-
-        
-        pass
-        ########################################################
-        ## COMPLETAR PARA TODAS LAS VERSIONES SI ES NECESARIO ##
-        ########################################################
-        
-        p1 = sorted(p1)      #ordenamos las dos listas
+        p1 = sorted(p1)                      # ordenamos las dos listas
         p2 = sorted(p2) 
 
-        DEL = self.and_posting(p1,p2)        #las palabras del and son las que tendremos que eliminar de p1
-
+        DEL = self.and_posting(p1,p2)        # las palabras del and son las que tendremos que eliminar de p1
         for term in p1:
             if term in DEL: p1.remove(term)    
-        
          
-        
         return p1
-
-
-
-
-
 
     #####################################
     ###                               ###
