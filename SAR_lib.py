@@ -470,7 +470,7 @@ class SAR_Indexer:
                 if tokens[i] == "AND":
                     if i + 1 < len(tokens) and tokens[i + 1] == "NOT":
                         # Realiza la operación AND NOT entre los postings list de los términos anteriores y siguientes
-                        posting_list = self.and_posting(posting_list, self.get_not_in_posting(tokens[i + 2]))
+                        posting_list = self.and_posting(posting_list, self.reverse_posting(self.get_posting(tokens[i + 2])))
                         i += 3  # Avanza tres tokens para saltar el operador, NOT y el término siguiente
                     else:
                         # Realiza la operación AND entre los postings list de los términos anteriores y siguientes
@@ -479,7 +479,7 @@ class SAR_Indexer:
                 elif tokens[i] == "OR":
                     if i + 1 < len(tokens) and tokens[i + 1] == "NOT":
                         # Realiza la operación OR NOT entre los postings list de los términos anteriores y siguientes
-                        posting_list = self.or_posting(posting_list, self.get_not_in_posting(tokens[i + 2]))
+                        posting_list = self.or_posting(posting_list, self.reverse_posting(self.get_posting(tokens[i + 2])))
                         i += 3  # Avanza tres tokens para saltar el operador, NOT y el término siguiente
                     else:
                         # Realiza la operación OR entre los postings list de los términos anteriores y siguientes
@@ -518,15 +518,21 @@ class SAR_Indexer:
         ## COMPLETAR PARA TODAS LAS VERSIONES ##
         ########################################
         if(field is None):
-            res = self.index["term"]
-
+            res = self.index["all"].get(term)
+  
         return res                                              ##!!!!!FALTA ACABAR PARA CUANDO FIELD != OPCIONAL
     
     def get_not_in_posting(self, term):
         """Return the documents that are not in the posting list of a given term."""
-        all_docs = list(self.docs.keys())
-        posting = self.index.get(term, [])
-        return [doc for doc in all_docs if doc not in posting]
+        all_art = self.articles.keys()
+        res = self.index["all"].get(term)
+        print(res)
+        sol=[]
+        for doc in all_art:
+            if doc not in res:
+                sol.append(doc)
+        print("Documentos de NOT "+term+ str(sol))        
+        return sol
 
     def get_positionals(self, terms:str, index):
         """
@@ -606,13 +612,16 @@ class SAR_Indexer:
         return: posting list con todos los artid exceptos los contenidos en p
 
         """
+        print(p)
         reverse = []
         noticias= self.articles.keys()
-        for index in noticias:
-            if index not in p:
-                reverse.append(p[index])
-
+        print(noticias)
+        for doc in noticias:
+             if doc not in p:
+                reverse.append(doc)
+        print(reverse)
         return reverse
+    
 
 
     def and_posting(self, p1:list, p2:list):
@@ -647,7 +656,7 @@ class SAR_Indexer:
 
         return AND
 
-    def or_posting(p1:list, p2:list):
+    def or_posting(self,p1:list, p2:list):
         """
         NECESARIO PARA TODAS LAS VERSIONES
 
@@ -675,18 +684,17 @@ class SAR_Indexer:
                 OR.append(p2[index2])
                 index2 += 1
             else:
-                OR.append(p1[index2])
+                OR.append(p1[index1])
                 index1 += 1
                 index2 += 1
 
-        while index1 < len(p1):
+        while index1 != len(p1):
             OR.append(p1[index1])
             index1 += 1
-
-        while index2 < len(p2):
+        while index2 != len(p2):
             OR.append(p2[index2])
             index2 += 1
-
+        
         return OR
 
 
@@ -767,7 +775,8 @@ class SAR_Indexer:
         ################
         r = self.solve_query(query)
         print('query: ' + query)
-        print('num results: ' + len(r))
+        print('num results: ' + str(len(r)))
+    
 
 
 
