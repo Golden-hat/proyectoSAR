@@ -127,7 +127,7 @@ class SAR_Wiki_Crawler:
 
         return None
 
-
+    ## Marc Ramis y Adrián Fernández
     def parse_wikipedia_textual_content(self, text: str, url: str) -> Optional[Dict[str, Union[str,List]]]:
         """Devuelve una estructura tipo artículo a partir del text en crudo
 

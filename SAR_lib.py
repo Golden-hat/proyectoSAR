@@ -373,7 +373,38 @@ class SAR_Indexer:
 
         if query is None or len(query) == 0:
             return []
+        else:
+            # Realiza el parsing de la query
+            tokens = query.split()
+            posting_list = []
 
+            # Recorre la lista de tokens para evaluar la query
+            i = 0
+            while i < len(tokens):
+                if tokens[i] == "AND":
+                    if i + 1 < len(tokens) and tokens[i + 1] == "NOT":
+                        # Realiza la operación AND NOT entre los postings list de los términos anteriores y siguientes
+                        posting_list = self.and_posting(posting_list, self.get_not_in_posting(tokens[i + 2]))
+                        i += 3  # Avanza tres tokens para saltar el operador, NOT y el término siguiente
+                    else:
+                        # Realiza la operación AND entre los postings list de los términos anteriores y siguientes
+                        posting_list = self.and_posting(posting_list, self.get_posting(tokens[i + 1]))
+                        i += 2  # Avanza dos tokens para saltar el operador y el término siguiente
+                elif tokens[i] == "OR":
+                    if i + 1 < len(tokens) and tokens[i + 1] == "NOT":
+                        # Realiza la operación OR NOT entre los postings list de los términos anteriores y siguientes
+                        posting_list = self.or_posting(posting_list, self.get_not_in_posting(tokens[i + 2]))
+                        i += 3  # Avanza tres tokens para saltar el operador, NOT y el término siguiente
+                    else:
+                        # Realiza la operación OR entre los postings list de los términos anteriores y siguientes
+                        posting_list = self.or_posting(posting_list, self.get_posting(tokens[i + 1]))
+                        i += 2  # Avanza dos tokens para saltar el operador y el término siguiente
+                else:
+                    # Obtiene el postings list del término y lo guarda como posting_list inicial si es el primer término
+                    posting_list = self.get_posting(tokens[i])
+                    i += 1  # Avanza un token
+            return posting_list
+                    
         ########################################
         ## COMPLETAR PARA TODAS LAS VERSIONES ##
         ########################################
@@ -403,7 +434,12 @@ class SAR_Indexer:
             res = self.index["term"]
 
         return res                                              ##!!!!!FALTA ACABAR PARA CUANDO FIELD != OPCIONAL
-
+    
+    def get_not_in_posting(self, term):
+        """Return the documents that are not in the posting list of a given term."""
+        all_docs = list(self.docs.keys())
+        posting = self.index.get(term, [])
+        return [doc for doc in all_docs if doc not in posting]
 
 
     def get_positionals(self, terms:str, index):
