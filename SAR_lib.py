@@ -518,7 +518,10 @@ class SAR_Indexer:
         ## COMPLETAR PARA TODAS LAS VERSIONES ##
         ########################################
         if(field is None):
-            res = self.index["all"].get(term)
+            if term in self.index["all"]:
+                res = self.index["all"].get(term)
+            else:
+                res = None
   
         return res                                              ##!!!!!FALTA ACABAR PARA CUANDO FIELD != OPCIONAL
     
