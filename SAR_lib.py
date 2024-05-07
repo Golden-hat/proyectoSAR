@@ -45,7 +45,7 @@ class SAR_Indexer:
         self.urls = set() # hash para las urls procesadas,
         self.index = {'all':{},'title':{}, 'summary':{},'section-name':{},'url':{}} # hash para el indice invertido de terminos --> clave: termino, valor: posting list
         self.sindex = {'all':{},'title':{}, 'summary':{},'section-name':{},'url':{}} # hash para el indice invertido de stems --> clave: stem, valor: lista con los terminos que tienen ese stem
-        self.ptindex = {} # hash para el indice permuterm.
+        self.ptindex = {'all':{},'title':{}, 'summary':{},'section-name':{},'url':{}} # hash para el indice permuterm.
         self.docs = {} # diccionario de terminos --> clave: entero(docid),  valor: ruta del fichero.
         self.weight = {} # hash de terminos para el pesado, ranking de resultados.
         self.articles = {} # hash de articulos --> clave entero (artid), valor: la info necesaria para diferencia los artículos dentro de su fichero
@@ -241,44 +241,44 @@ class SAR_Indexer:
         for i, line in enumerate(open(filename)):
             j = self.parse_article(line)
             artid = len(self.articles) + 1    
-            if self.multifield:                                             #comprobamos si tenemos que hacer una indexación multicampo...
-                for field, allow in self.fields:                            #en ese caso, hacemos un índice por campo           
-                    if(not self.already_in_index(j)):
-                        self.articles[artid] = (len(self.docs),i)           #metemos el articulo en el diccionario si no estaba ya indexado
+            if self.multifield:
+                multiSet = self.fields
+            else:
+                multiSet = self.fields[0]                               #comprobamos si tenemos que hacer una indexación multicampo...
+            for field, allow in multiSet:                               #en ese caso, hacemos un índice por campo           
+                if(not self.already_in_index(j)):
+                    self.articles[artid] = (len(self.docs),i)           #metemos el articulo en el diccionario si no estaba ya indexado
+                
+                    txt = j[field]                                      #asignamos a txt todo el texto del articulo j
+                    if allow: 
+                        txt = txt.lower()                               #lo pasamos a minuscula
+                        txt = self.tokenizer.split(txt)                 #eliminamos todos los terminos no alfanumericos si el campo lo permite
                     
-                        txt = j[field]                                      #asignamos a txt todo el texto del articulo j
-                        if allow: 
-                            txt = txt.lower()                               #lo pasamos a minuscula
-                            txt = self.tokenizer.split(txt)                 #eliminamos todos los terminos no alfanumericos si el campo lo permite
-                        
-                            for term in txt:                                #asociamos una lista a cada término
+                        if self.positional:
+                            for term in txt:                                                   #asociamos una lista a cada término
+                                if term not in self.index[field]:
+                                    self.index[field][term] = {}                             #si buscamos índices posicionales...
+                            for pos, term in enumerate(txt):
+                                if artid not in self.index[field][term]: 
+                                    self.index[field][term][artid] = [pos]
+                                if pos not in self.index[field][term][artid]:                   #para cada entrada (termino) del dicc vamos añadiendo los articulos en los que salen
+                                    self.index[field][term][artid].append(pos)
+                        else:
+                            for term in txt:                                                   #asociamos una lista a cada término
                                 if term not in self.index[field]:
                                     self.index[field][term] = []
-                            for term in txt:
-                                if artid not in self.index[field][term]: 
-                                    self.index[field][term].append(artid)   #para cada entrada (termino) del dicc vamos añadiendo los articulos en los que salen
-                        else:                                               #tratamiento especial para los términos no tokenizados
-                            if txt not in self.index[field]:
-                                self.index[field][txt] = []
-                            if txt not in self.index[field][txt]: 
-                                self.index[field][txt].append(artid) 
-            else:                                      
-                j = self.parse_article(line)
-                artid = len(self.articles) + 1                         #identificador unico de articulo, si empieza en 1 cambiar por len()+1
-        
-                if(not self.already_in_index(j)):
-                    self.articles[artid] = (len(self.docs),i)          #metemos el articulo en el diccionario si no estaba ya indexado
-                
-                    txt = j['all']                                     #asignamos a txt todo el texto del articulo j
-                    txt = txt.lower()                                  #lo pasamos a minuscula
-                    txt = self.tokenizer.split(txt)                    #eliminamos todos los terminos no alfanumericos si el campo lo permite
-                    
-                    for term in txt:                                   #asociamos una lista a cada término
-                        if term not in self.index['all']:
-                            self.index['all'][term] = []
-                    for term in txt:
-                        if artid not in self.index['all'][term]: 
-                            self.index['all'][term].append(artid)      #para cada entrada (termino) del dicc vamos añadiendo los articulos en los que salen
+                                for term in txt:
+                                    if artid not in self.index[field][term]: 
+                                        self.index[field][term].append(artid)
+            
+                    else:                                                       #tratamiento especial para los términos no tokenizados
+                        if txt not in self.index[field]:
+                            self.index[field][txt] = []  
+                        if txt not in self.index[field][txt]: 
+                            self.index[field][txt].append(artid)
+            
+        print(self.index["all"]["oric"])
+
 
         # print(self.index)
         self.docs[len(self.docs)] = os.path.dirname(filename)   #añadimos el documento como procesado en el diccionario
@@ -349,8 +349,6 @@ class SAR_Indexer:
             multifield = ['all']
 
         for field in multifield:
-            # Se aplica stemming a cada token del self.index[field] y se añade al indice de stems
-            # En este caso solo se guarda la noticia, no la posición
             for key in self.index[field]:
                 stem = self.stemmer.stem(key)
                 if stem not in self.sindex[field]:
@@ -358,8 +356,6 @@ class SAR_Indexer:
                 else:
                     if key not in self.sindex[field][stem]:
                         self.sindex[field][stem] += [key] 
-        
-        print(self.sindex['summary'])
 
     
     def make_permuterm(self):
@@ -371,11 +367,21 @@ class SAR_Indexer:
 
 
         """
-        pass
-        ####################################################
-        ## COMPLETAR PARA FUNCIONALIDAD EXTRA DE STEMMING ##
-        ####################################################
+        if self.multifield:
+            multifield = ["all", "title", "summary", "section-name", 'url']
+        else:
+            multifield = ['all']
 
+        for field in multifield:
+            for key in self.index[field]:
+                for i in range(len(key)+1):
+                    permutem = key[:i]+"$"+key[i:]
+                    if permutem not in self.ptindex[field]:
+                        self.ptindex[field][permutem] = [permutem]
+                    else:
+                        if key not in self.ptindex[field][permutem]:
+                            self.ptindex[field][permutem] += [permutem]
+                            
 
     def show_stats(self):
         """
@@ -384,6 +390,7 @@ class SAR_Indexer:
         Muestra estadisticas de los indices
         
         """
+        self.get_stemming("ganador","all")
         print("========================================")
         print("Number of indexed files: ", self.counterFiles)
         print("----------------------------------------")
@@ -403,9 +410,10 @@ class SAR_Indexer:
         if self.permuterm:
             print("----------------------------------------")
             if not self.multifield:
+                print("PERMUTEM:")
                 print("\t# of tokens in 'all': ", len(self.sindex['all']))
             else:
-                print("TOKENS:")
+                print("PERMUTEM:")
                 print("\t# of tokens in 'all': ", len(self.ptindex['all']))
                 print("\t# of tokens in 'title': ", len(self.ptindex['title']))
                 print("\t# of tokens in 'summary': ", len(self.ptindex['summary']))
@@ -424,7 +432,13 @@ class SAR_Indexer:
                 print("\t# of stems in 'summary': ", len(self.sindex['summary']))
                 print("\t# of stems in 'section': ", len(self.sindex['section-name']))
                 print("\t# of stems in 'url': ", len(self.sindex['url']))
-    
+        if self.positional:
+            print("----------------------------------------")
+            print("Positional queries are allowed.")
+        else:
+            print("----------------------------------------")
+            print("Positional queries are NOT allowed.")
+
         print("========================================")
 
 
@@ -525,17 +539,6 @@ class SAR_Indexer:
   
         return res                                              ##!!!!!FALTA ACABAR PARA CUANDO FIELD != OPCIONAL
     
-    def get_not_in_posting(self, term):
-        """Return the documents that are not in the posting list of a given term."""
-        all_art = self.articles.keys()
-        res = self.index["all"].get(term)
-        print(res)
-        sol=[]
-        for doc in all_art:
-            if doc not in res:
-                sol.append(doc)
-        print("Documentos de NOT "+term+ str(sol))        
-        return sol
 
     def get_positionals(self, terms:str, index):
         """
@@ -550,9 +553,10 @@ class SAR_Indexer:
 
         """
         pass
-        ########################################################
-        ## COMPLETAR PARA FUNCIONALIDAD EXTRA DE POSICIONALES ##
-        ########################################################
+        if self.multifield:
+            multiSet = self.fields
+        else:
+            multiSet = self.fields[0] 
 
 
     def get_stemming(self, term:str, field: Optional[str]=None):
@@ -572,9 +576,10 @@ class SAR_Indexer:
 
         if stem in self.sindex[field]:
             for token in self.sindex[field][stem]:
-                # Se utiliza el OR propio por eficiencia
-                res = self.or_posting(
-                    res, list(self.index[field][token].keys()))
+                
+                res = self.or_posting(                      # Se utiliza el OR propio
+                    res, list(self.index[field][token]))
+        # print(res)
         return res
 
         ####################################################
@@ -617,14 +622,13 @@ class SAR_Indexer:
         """
         print(p)
         reverse = []
-        noticias= self.articles.keys()
+        noticias = self.articles.keys()
         print(noticias)
         for doc in noticias:
              if doc not in p:
                 reverse.append(doc)
         print(reverse)
         return reverse
-    
 
 
     def and_posting(self, p1:list, p2:list):
@@ -772,10 +776,6 @@ class SAR_Indexer:
         return: el numero de artículo recuperadas, para la opcion -T
 
         """
-        
-        ################
-        ## COMPLETAR  ##
-        ################
         r = self.solve_query(query)
         print('query: ' + query)
         print('num results: ' + str(len(r)))
