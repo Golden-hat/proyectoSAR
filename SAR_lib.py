@@ -628,7 +628,20 @@ class SAR_Indexer:
         ##################################################
         ## COMPLETAR PARA FUNCIONALIDAD EXTRA PERMUTERM ##
         ##################################################
-        pass
+
+        res=set()
+        term = term.lower()  # Convertimod el término a minúsculas
+        term += "$"  # Agregamos $ al final
+
+        for i in range(len(term)):
+            res.add(term[i:] + term[:i])  # Ahora vamos pasando por cada posicion de term y vamos rotandolo y guardándolo en res
+        
+        res_posting = []
+        for i in res:
+            if i in self.ptindex:
+                res_posting.append(self.ptindex[i])
+
+        return res_posting
 
 
     def reverse_posting(self, p:list):
