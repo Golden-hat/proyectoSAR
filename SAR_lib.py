@@ -240,11 +240,12 @@ class SAR_Indexer:
         """
         for i, line in enumerate(open(filename)):
             j = self.parse_article(line)
-            artid = len(self.articles) + 1    
+            artid = len(self.articles) + 1
+
             if self.multifield:
                 multiSet = self.fields
             else:
-                multiSet = self.fields[0]                               #comprobamos si tenemos que hacer una indexación multicampo...
+                multiSet = [self.fields[0]]                             #comprobamos si tenemos que hacer una indexación multicampo...
             for field, allow in multiSet:                               #en ese caso, hacemos un índice por campo           
                 if(not self.already_in_index(j)):
                     self.articles[artid] = (len(self.docs),i)           #metemos el articulo en el diccionario si no estaba ya indexado
@@ -276,9 +277,6 @@ class SAR_Indexer:
                             self.index[field][txt] = []  
                         if txt not in self.index[field][txt]: 
                             self.index[field][txt].append(artid)
-            
-        print(self.index["all"]["oric"])
-
 
         # print(self.index)
         self.docs[len(self.docs)] = os.path.dirname(filename)   #añadimos el documento como procesado en el diccionario
@@ -325,24 +323,6 @@ class SAR_Indexer:
 
 
         """
-        # if self.multifield:                                             #comprobamos si tenemos que hacer una indexación multicampo...
-        #     for field, allow in self.fields:                            #en ese caso, hacemos un índice por campo           
-        #         for key in self.index[field]:
-        #             stem = self.stemmer.stem(key)
-        #             stemList = self.get_stemming(key, field)            #esto está mal porque lo que queremos es construir una lista con palabras que empiecen por el stem
-
-        #             if stem not in self.sindex[field]:
-        #                 self.sindex[field][stem] = []
-        #                 self.sindex[field][stem].append(stemList)
-        # else:
-        #    for key in self.index['all']:
-        #         stem = self.stemmer.stem(key)
-        #         stemList = self.get_stemming(key, 'all')           
-
-        #         if stem not in self.sindex['all']:
-        #             self.sindex['all'][stem] = []
-        #             self.sindex['all'][stem].append(stemList)
-
         if self.multifield:
             multifield = ["all", "title", "summary", "section-name", 'url']
         else:
@@ -390,11 +370,11 @@ class SAR_Indexer:
         Muestra estadisticas de los indices
         
         """
-        self.get_stemming("ganador","all")
+        print(self.get_positionals(["el","resultado","es","que","desarrolla"], "all"))
         print("========================================")
         print("Number of indexed files: ", self.counterFiles)
         print("----------------------------------------")
-        print("Number of indexed articles: ", len(self.index['url']))
+        print("Number of indexed articles: ", len(self.articles))
         print("----------------------------------------")
         if self.multifield: 
             print("TOKENS:")
@@ -411,14 +391,14 @@ class SAR_Indexer:
             print("----------------------------------------")
             if not self.multifield:
                 print("PERMUTEM:")
-                print("\t# of tokens in 'all': ", len(self.sindex['all']))
+                print("\t# of permutem in '': ", len(self.ptindex['all']))
             else:
                 print("PERMUTEM:")
-                print("\t# of tokens in 'all': ", len(self.ptindex['all']))
-                print("\t# of tokens in 'title': ", len(self.ptindex['title']))
-                print("\t# of tokens in 'summary': ", len(self.ptindex['summary']))
-                print("\t# of tokens in 'section': ", len(self.ptindex['section-name']))
-                print("\t# of tokens in 'url': ", len(self.ptindex['url']))
+                print("\t# of permutem in 'all': ", len(self.ptindex['all']))
+                print("\t# of permutem in 'title': ", len(self.ptindex['title']))
+                print("\t# of permutem in 'summary': ", len(self.ptindex['summary']))
+                print("\t# of permutem in 'section': ", len(self.ptindex['section-name']))
+                print("\t# of permutem in 'url': ", len(self.ptindex['url']))
 
         if self.stemming:
             print("----------------------------------------")
@@ -545,7 +525,7 @@ class SAR_Indexer:
         return res                                              
     
 
-    def get_positionals(self, terms:str, index):
+    def get_positionals(self, terms:str, field):
         """
 
         Devuelve la posting list asociada a una secuencia de terminos consecutivos.
@@ -557,11 +537,52 @@ class SAR_Indexer:
         return: posting list
 
         """
+        posting = [] # lista de posting a devolver
+
         pass
         if self.multifield:
-            multiSet = self.fields
+            f = field
         else:
-            multiSet = self.fields[0] 
+            f = 'all'
+
+        postingDictList = []                               # lista de diccionarios
+        for term in terms:
+            postingDictList.append(self.index[f][term])    # guardamos en la lista de diccionarios las posting lists de los términos
+        
+        # Ahora trabajamos sobre el diccionario del primer término y le añadimos los postings de los diccionarios del resto
+        # de términos para buscar consecuciones.
+        index = 1
+        while index < len(postingDictList):
+            for key in postingDictList[index]:
+                if key in postingDictList[0]:
+                    postingDictList[0][key] += postingDictList[index][key]
+            index += 1
+        
+        for artid in postingDictList[0]:
+            # ordenamos ascendentemente y ahora buscamos términos consecutivos (1,2,3...)
+            postingList = sorted(postingDictList[0][artid])
+            
+            count = 0
+            for i, pos in enumerate(postingList):
+                if count == len(terms)-1:
+                    posting.append(artid)
+                    break
+                if pos == postingList[-1]:
+                    break
+                # comprobamos si la palabra que estamos buscando está en el artículo
+                if self.index[f][terms[count]].get(artid) is not None:
+                # tenemos que asegurarnos que la palabra que estamos consultando es la que sigue el orden dictado
+                # por los términos. Primero se busca term[0], luego term[1]... etc. La disposición de nuestro código
+                # no asegura esto por defecto, y por ello debe comprobarse que la posición siendo consultada
+                # existe dentro de la lista de posiciones de la palabra en ese artículo
+                    if postingList[i]+1 == postingList[i+1] and pos in self.index[f][terms[count]][artid]:
+                        count += 1
+                    else:
+                        count = 0
+                else:
+                    count = 0
+
+        return posting                    
 
 
     def get_stemming(self, term:str, field: Optional[str]=None):
@@ -586,10 +607,6 @@ class SAR_Indexer:
                     res, list(self.index[field][token]))
         # print(res)
         return res
-
-        ####################################################
-        ## COMPLETAR PARA FUNCIONALIDAD EXTRA DE STEMMING ##
-        ####################################################
 
 
     def get_permuterm(self, term:str, field:Optional[str]=None):
