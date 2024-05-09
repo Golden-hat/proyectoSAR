@@ -370,7 +370,6 @@ class SAR_Indexer:
         Muestra estadisticas de los indices
         
         """
-        print(self.get_positionals(["los","ordenadores"], "all"))
         print("========================================")
         print("Number of indexed files: ", self.counterFiles)
         print("----------------------------------------")
