@@ -532,12 +532,17 @@ class SAR_Indexer:
         ## COMPLETAR PARA TODAS LAS VERSIONES ##
         ########################################
         if(field is None):
-            if term in self.index["all"]:
+            if term in self.index["all"]:                         #si no se especifica field buscamos en el diccionario donde solo estan los terminos
                 res = self.index["all"].get(term)
             else:
                 res = None
+        else:
+            if term in self.index[field]:                          #si se especifica el field buscamos en termino en el diccionario del field
+                res = self.index[field].get(term)
+            else:
+                res = None
   
-        return res                                              ##!!!!!FALTA ACABAR PARA CUANDO FIELD != OPCIONAL
+        return res                                              
     
 
     def get_positionals(self, terms:str, index):
