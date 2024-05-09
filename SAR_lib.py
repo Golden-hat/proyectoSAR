@@ -513,19 +513,59 @@ class SAR_Indexer:
         ########################################
         ## COMPLETAR PARA TODAS LAS VERSIONES ##
         ########################################
-        if(field is None):
-            if term in self.index["all"]:                         #si no se especifica field buscamos en el diccionario donde solo estan los terminos
-                res = self.index["all"].get(term)
+        if (self.use_stemming):
+            if(field is None):
+                if term in self.index["all"]:                         #si no se especifica field buscamos en el diccionario donde solo estan los terminos
+                    res = self.get_stemming(term)
+                else:
+                    res = None
             else:
-                res = None
+                if term in self.index[field]:                          #si se especifica el field buscamos en termino en el diccionario del field
+                    res = self.get_stemming(term)
+                else:
+                    res = None
+
         else:
-            if term in self.index[field]:                          #si se especifica el field buscamos en termino en el diccionario del field
-                res = self.index[field].get(term)
+            if(field is None):
+                if term in self.index["all"]:                         #si no se especifica field buscamos en el diccionario donde solo estan los terminos
+                    res = self.index["all"].get(term)
+                else:
+                    res = None
             else:
-                res = None
-  
+                if term in self.index[field]:                          #si se especifica el field buscamos en termino en el diccionario del field
+                    res = self.index[field].get(term)
+                else:
+                    res = None
+        """    
+        elif(self.use_permuterm):
+            if(field is None):
+                if term in self.index["all"]:                         #si no se especifica field buscamos en el diccionario donde solo estan los terminos
+                    res = self.get_permuterm(term)
+                else:
+                    res = None
+            else:
+                if term in self.index[field]:                          #si se especifica el field buscamos en termino en el diccionario del field
+                    res = self.get_permuterm(term)
+                else:
+                    res = None
+            
+        elif(self.use_positional):
+            if(field is None):
+                if term in self.index["all"]:                         #si no se especifica field buscamos en el diccionario donde solo estan los terminos
+                    res = self.get_positionals(term)
+                else:
+                    res = None
+            else:
+                if term in self.index[field]:                          #si se especifica el field buscamos en termino en el diccionario del field
+                    res = self.get_positionals(term)
+                else:
+                    res = None
+        """
+       
+
+        print(term+str(res))
         return res                                              
-    
+        
 
     def get_positionals(self, terms:str, field):
         """
@@ -604,14 +644,22 @@ class SAR_Indexer:
 
         """
         stem = self.stemmer.stem(term)
+        print(stem)
         res = []
-
-        if stem in self.sindex[field]:
-            for token in self.sindex[field][stem]:
-                
-                res = self.or_posting(                      # Se utiliza el OR propio
-                    res, list(self.index[field][token]))
-        # print(res)
+        if field is not None:
+            if stem in self.sindex[field]:
+                for token in self.sindex[field][stem]:
+                    
+                    res = self.or_posting(                      # Se utiliza el OR propio
+                        res, list(self.index[field][token]))
+            # print(res)
+        else:
+            if stem in self.sindex["all"]:
+                for token in self.sindex["all"].get(stem):
+                    print(token)
+                    res = self.or_posting(                      # Se utiliza el OR propio
+                        res, self.index["all"].get(token))
+        
         return res
 
 
