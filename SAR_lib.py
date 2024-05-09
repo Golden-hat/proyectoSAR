@@ -370,7 +370,7 @@ class SAR_Indexer:
         Muestra estadisticas de los indices
         
         """
-        print(self.get_positionals(["el","resultado","es","que","desarrolla"], "all"))
+        print(self.get_positionals(["los","ordenadores"], "all"))
         print("========================================")
         print("Number of indexed files: ", self.counterFiles)
         print("----------------------------------------")
@@ -549,18 +549,22 @@ class SAR_Indexer:
         for term in terms:
             postingDictList.append(self.index[f][term])    # guardamos en la lista de diccionarios las posting lists de los términos
         
-        # Ahora trabajamos sobre el diccionario del primer término y le añadimos los postings de los diccionarios del resto
-        # de términos para buscar consecuciones.
-        index = 1
+        groupDict={}
+        # Ahora creamos un nuevo diccionario que almacene todos los artid con sus respectivos
+        # términos para buscar consecuciones.
+        index = 0
         while index < len(postingDictList):
-            for key in postingDictList[index]:
-                if key in postingDictList[0]:
-                    postingDictList[0][key] += postingDictList[index][key]
+            for artid in postingDictList[index]:
+                if artid not in groupDict:
+                    groupDict[artid] = []
+                    groupDict[artid] += postingDictList[index][artid]
+                else:
+                    groupDict[artid] += postingDictList[index][artid] 
             index += 1
-        
-        for artid in postingDictList[0]:
+
+        for artid in groupDict:
             # ordenamos ascendentemente y ahora buscamos términos consecutivos (1,2,3...)
-            postingList = sorted(postingDictList[0][artid])
+            postingList = sorted(groupDict[artid])
             
             count = 0
             for i, pos in enumerate(postingList):
