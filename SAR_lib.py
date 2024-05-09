@@ -478,6 +478,9 @@ class SAR_Indexer:
                         # Realiza la operación OR entre los postings list de los términos anteriores y siguientes
                         posting_list = self.or_posting(posting_list, self.get_posting(tokens[i + 1]))
                         i += 2  # Avanza dos tokens para saltar el operador y el término siguiente
+                elif tokens[i] == "NOT":
+                    posting_list = self.reverse_posting(self.get_posting(tokens[i + 1]))
+                    i += 2
                 else:
                     # Obtiene el postings list del término y lo guarda como posting_list inicial si es el primer término
                     posting_list = self.get_posting(tokens[i])
@@ -658,14 +661,12 @@ class SAR_Indexer:
         return: posting list con todos los artid exceptos los contenidos en p
 
         """
-        print(p)
+       
         reverse = []
         noticias = self.articles.keys()
-        print(noticias)
         for doc in noticias:
              if doc not in p:
                 reverse.append(doc)
-        print(reverse)
         return reverse
 
 
