@@ -449,49 +449,51 @@ class SAR_Indexer:
         return: posting list con el resultado de la query
 
         """
-
+        print (query)
         if query is None or len(query) == 0:
             return []
         else:
             # Realiza el parsing de la query
-            tokens = query.split()
+            tokens = re.split(r'(\bAND\b|\bOR\b|\bNOT\b|\bAND NOT\b|\bOR NOT\b)', query)
+            tokens = [token.strip() for token in tokens if token.strip()]  # Remove empty strings and strip whitespace
+            print (tokens)
             posting_list = []
-
+            print(tokens)
             # Recorre la lista de tokens para evaluar la query
             i = 0
             while i < len(tokens):
                 if tokens[i] == "AND":
                     if i + 1 < len(tokens) and tokens[i + 1] == "NOT":
-                        # Realiza la operación AND NOT entre los postings list de los términos anteriores y siguientes
-                        posting_list = self.and_posting(posting_list, self.reverse_posting(self.get_posting(tokens[i + 2])))
-                        i += 3  # Avanza tres tokens para saltar el operador, NOT y el término siguiente
+                        posting_list = self.and_posting(posting_list, self.reverse_posting(self.get_posting_or_positionals(tokens[i + 2])))
+                        i += 3
                     else:
-                        # Realiza la operación AND entre los postings list de los términos anteriores y siguientes
-                        posting_list = self.and_posting(posting_list, self.get_posting(tokens[i + 1]))
-                        i += 2  # Avanza dos tokens para saltar el operador y el término siguiente
+                        posting_list = self.and_posting(posting_list, self.get_posting_or_positionals(tokens[i + 1]))
+                        i += 2
                 elif tokens[i] == "OR":
                     if i + 1 < len(tokens) and tokens[i + 1] == "NOT":
-                        # Realiza la operación OR NOT entre los postings list de los términos anteriores y siguientes
-                        posting_list = self.or_posting(posting_list, self.reverse_posting(self.get_posting(tokens[i + 2])))
-                        i += 3  # Avanza tres tokens para saltar el operador, NOT y el término siguiente
+                        posting_list = self.or_posting(posting_list, self.reverse_posting(self.get_posting_or_positionals(tokens[i + 2])))
+                        i += 3
                     else:
-                        # Realiza la operación OR entre los postings list de los términos anteriores y siguientes
-                        posting_list = self.or_posting(posting_list, self.get_posting(tokens[i + 1]))
-                        i += 2  # Avanza dos tokens para saltar el operador y el término siguiente
+                        posting_list = self.or_posting(posting_list, self.get_posting_or_positionals(tokens[i + 1]))
+                        i += 2
                 elif tokens[i] == "NOT":
-                    posting_list = self.reverse_posting(self.get_posting(tokens[i + 1]))
+                    posting_list = self.reverse_posting(self.get_posting_or_positionals(tokens[i + 1]))
                     i += 2
                 else:
-                    # Obtiene el postings list del término y lo guarda como posting_list inicial si es el primer término
-                    posting_list = self.get_posting(tokens[i])
-                    i += 1  # Avanza un token
+                    posting_list = self.get_posting_or_positionals(tokens[i])
+                    i += 1
             return posting_list
                     
         ########################################
         ## COMPLETAR PARA TODAS LAS VERSIONES ##
         ########################################
 
-
+    def get_posting_or_positionals(self, token):
+        if ' ' in token:
+            return self.get_positionals(token, None)
+        else:
+            return self.get_posting(token, None)
+        
     def get_posting(self, term:str, field:Optional[str]=None):
         """
 
@@ -582,15 +584,19 @@ class SAR_Indexer:
         posting = [] # lista de posting a devolver
 
         pass
-        if self.multifield:
+        if field is not None:
             f = field
         else:
             f = 'all'
 
-        postingDictList = []                               # lista de diccionarios
+        postingDictList = []  # lista de diccionarios
+        # Supongamos que 'input_string' es la cadena de entrada
+        terms = terms.split()
+
         for term in terms:
-            postingDictList.append(self.index[f][term])    # guardamos en la lista de diccionarios las posting lists de los términos
-        
+            if term != " ":
+                postingDictList.append(self.index[f][term])    # guardamos en la lista de diccionarios las posting lists de los términos
+            
         groupDict={}
         # Ahora creamos un nuevo diccionario que almacene todos los artid con sus respectivos
         # términos para buscar consecuciones.
