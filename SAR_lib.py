@@ -57,6 +57,8 @@ class SAR_Indexer:
         self.use_ranking = False  # valor por defecto, se cambia con self.set_ranking()
         # añadimos contadores que nos ayudarán a imprimir por pantalla los stats de la indexación
         self.counterFiles = 0
+        self.use_positional = False
+        self.use_permuterm = False
 
 
     ###############################
@@ -434,7 +436,7 @@ class SAR_Indexer:
     ###################################
 
 
-    def solve_query(self, query:str, prev:Dict={}):
+    def solve_query(self, query:str, prev:List={}):
         """
         NECESARIO PARA TODAS LAS VERSIONES
 
@@ -452,47 +454,117 @@ class SAR_Indexer:
         print (query)
         if query is None or len(query) == 0:
             return []
-        else:
-            # Realiza el parsing de la query
-            tokens = re.split(r'(\bAND\b|\bOR\b|\bNOT\b|\bAND NOT\b|\bOR NOT\b)', query)
-            tokens = [token.strip() for token in tokens if token.strip()]  # Remove empty strings and strip whitespace
-            print (tokens)
-            posting_list = []
-            print(tokens)
-            # Recorre la lista de tokens para evaluar la query
-            i = 0
-            while i < len(tokens):
-                if tokens[i] == "AND":
-                    if i + 1 < len(tokens) and tokens[i + 1] == "NOT":
-                        posting_list = self.and_posting(posting_list, self.reverse_posting(self.get_posting_or_positionals(tokens[i + 2])))
-                        i += 3
-                    else:
-                        posting_list = self.and_posting(posting_list, self.get_posting_or_positionals(tokens[i + 1]))
-                        i += 2
-                elif tokens[i] == "OR":
-                    if i + 1 < len(tokens) and tokens[i + 1] == "NOT":
-                        posting_list = self.or_posting(posting_list, self.reverse_posting(self.get_posting_or_positionals(tokens[i + 2])))
-                        i += 3
-                    else:
-                        posting_list = self.or_posting(posting_list, self.get_posting_or_positionals(tokens[i + 1]))
-                        i += 2
-                elif tokens[i] == "NOT":
-                    posting_list = self.reverse_posting(self.get_posting_or_positionals(tokens[i + 1]))
-                    i += 2
-                else:
-                    posting_list = self.get_posting_or_positionals(tokens[i])
-                    i += 1
-            return posting_list
-                    
-        ########################################
-        ## COMPLETAR PARA TODAS LAS VERSIONES ##
-        ########################################
+        else:   
+            # Tokenizamos las keywords y los paréntesis de la frase
+            tokenList = re.split(r'\bAND\b|\bOR\b|\bAND NOT\b|\bOR NOT\b|\bNOT\b|[()]', query)
+            tokenList = [re.sub(r'^\s+|\s+$', '', token) for token in tokenList if token.strip()]
 
+            separators = re.findall(r'\bAND\b|\bOR\b|\bAND NOT\b|\bOR NOT\b|\bNOT\b|[()]', query)
+            separators = [token for token in separators if token.strip()]
+
+            # Luego juntamos listas de separador y tokens
+            tokenizedList = []
+            
+            i = 0; j = 0; word = ""
+            for letter in query:
+                word += letter
+                if(i < len(tokenList) and re.sub(r'^\s+|\s+$', '', word) == tokenList[i]): 
+                    tokenizedList.append(tokenList[i]); word = ""; i+= 1; 
+                if(j < len(separators) and re.sub(r'^\s+|\s+$', '', word) == separators[j]): 
+                    tokenizedList.append(separators[j]); word = ""; j+= 1
+
+            for i, t in enumerate(tokenizedList):
+                if t not in ['(', "OR NOT", "AND NOT", "AND", "OR", 'NOT', ')']:
+                    tokenizedList[i] = self.get_posting_or_positionals(t)
+                    # Hemos de convertir a lista todos los diccionarios posicionales (cuando se utiliza la opción 
+                    # -P para generar el binario de búsqueda esto es necesario para evitar una excepción)
+                    if isinstance(tokenizedList[i], dict): tokenizedList[i] = [key for key in tokenizedList[i]]
+            
+            # añadimos paréntesis tanto al final como al principio para que la implementación funcione correctamente
+            # es necesario porque cuando se evaluan todas las operaciones nesteadas por paréntesis de niveles más altos
+            # falta por tratar el nivel más bajo, el cual no es accesible si la query no está envuelta en paréntesis.
+            tokenizedList.append(")")
+            tokenizedList.insert(0, "(")
+
+            lastOpen = 0; firstClosed = 0
+            # Mientras haya un par de paréntesis, tendremos que seguir operando para deshacernos de ellos.
+            while self.count_parentheses(tokenizedList) > 0:
+                print(tokenizedList)
+                if self.count_parentheses(tokenizedList) % 2 != 0: print("Error de input - paréntesis impares."); return []
+                for index, token in enumerate(tokenizedList):
+                    if token == "(":
+                        lastOpen = index
+                    if token == ")":
+                        firstClosed = index
+                        content = tokenizedList[lastOpen+1:firstClosed]
+                        if firstClosed - lastOpen > 2:
+                            # Eliminamos todo el contenido entre paréntesis inclusive y lo sustituimos en la posición
+                            # por el resultado de la subquery
+                            for i in range(firstClosed - lastOpen):
+                                tokenizedList.pop(lastOpen)
+                            tokenizedList[lastOpen] = self.evaluate(content)
+                        else:
+                            # Si solo hay un término entre paréntesis, simplemente los eliminamos y dejamos el término
+                            # (recordemos que sería una lista) intacto
+                            tokenizedList.pop(lastOpen)
+                            # Hemos de comprobar si tenemos que eliminar el último paréntesis y el primero, ya que
+                            # al eliminar su correspondiente, la longitud cambia y se convierte en firstClosed -1
+                            if firstClosed == len(tokenizedList):
+                                tokenizedList.pop()
+                            else:
+                                tokenizedList.pop(firstClosed-1) 
+                        # Salimos del bucle para volver a encontrar la encapsulación más cercana por la izquierda
+                        break
+            # Flatten, ya que se devuelve el resultado en una lista de listas
+            tokenizedList = [item for sublist in tokenizedList for item in sublist]
+            return tokenizedList
+
+    # Evalúa los contenidos de la "sub-query" contenida entre paréntesis que se le pasa
+    def evaluate(self, tokens):
+        i = 0
+        while i < len(tokens):
+            if tokens[i] == "AND":
+                if i + 1 < len(tokens) and tokens[i + 1] == "NOT":
+                    posting_list = self.and_posting(posting_list, self.reverse_posting(tokens[i + 2]))
+                    i += 3
+                else:
+                    posting_list = self.and_posting(posting_list, tokens[i + 1])
+                    i += 2
+            elif tokens[i] == "OR":
+                if i + 1 < len(tokens) and tokens[i + 1] == "NOT":
+                    posting_list = self.or_posting(posting_list, self.reverse_posting(tokens[i + 2]))
+                    i += 3
+                else:
+                    posting_list = self.or_posting(posting_list, tokens[i + 1])
+                    i += 2
+            elif tokens[i] == "NOT":
+                posting_list = self.reverse_posting(tokens[i + 1])
+                i += 2
+            else:
+                posting_list = tokens[i]
+                i += 1
+        return posting_list
+
+    # Método auxiliar para los posting, para los stemming ó para las consultas normales (falta permuterm)
     def get_posting_or_positionals(self, token):
         if ' ' in token:
-            return self.get_positionals(token, None)
+            self.use_positional = True
+            self.use_stemming = False
         else:
-            return self.get_posting(token, None)
+            self.use_positional = False 
+        if self.get_posting(token, None) == None: return []
+        return self.get_posting(token, None)
+
+    # Método que devuelve el nº de paréntesis de una lista
+    def count_parentheses(self, tokens):
+        open_count = 0
+        close_count = 0
+
+        for token in tokens:
+            if token == "(": open_count += 1
+            if token == ")": close_count += 1
+    
+        return open_count+close_count
         
     def get_posting(self, term:str, field:Optional[str]=None):
         """
@@ -512,64 +584,29 @@ class SAR_Indexer:
         NECESARIO PARA TODAS LAS VERSIONES
 
         """
-        ########################################
-        ## COMPLETAR PARA TODAS LAS VERSIONES ##
-        ########################################
         if (self.use_stemming):
-            if(field is None):
-                if term in self.index["all"]:                         #si no se especifica field buscamos en el diccionario donde solo estan los terminos
-                    res = self.get_stemming(term)
-                else:
-                    res = None
-            else:
-                if term in self.index[field]:                          #si se especifica el field buscamos en termino en el diccionario del field
-                    res = self.get_stemming(term)
-                else:
-                    res = None
-
+            if(field is None):                    #si no se especifica field buscamos en el diccionario donde solo estan los terminos
+                return self.get_stemming(term)
+            else:                     
+                return self.get_stemming(term, field)
+        elif(self.use_permuterm):
+            if(field is None):                     #si no se especifica field buscamos en el diccionario donde solo estan los terminos
+                return self.get_permuterm(term)
+            else:                       
+                return self.get_permuterm(term, field) 
+        elif(self.use_positional):
+            if(field is None):                       #si no se especifica field buscamos en el diccionario donde solo estan los terminos
+                return self.get_positionals(term)
+            else:                          
+                return self.get_positionals(term, field) 
         else:
             if(field is None):
-                if term in self.index["all"]:                         #si no se especifica field buscamos en el diccionario donde solo estan los terminos
-                    res = self.index["all"].get(term)
-                else:
-                    res = None
+                return self.index["all"].get(term)
             else:
-                if term in self.index[field]:                          #si se especifica el field buscamos en termino en el diccionario del field
-                    res = self.index[field].get(term)
-                else:
-                    res = None
-        """    
-        elif(self.use_permuterm):
-            if(field is None):
-                if term in self.index["all"]:                         #si no se especifica field buscamos en el diccionario donde solo estan los terminos
-                    res = self.get_permuterm(term)
-                else:
-                    res = None
-            else:
-                if term in self.index[field]:                          #si se especifica el field buscamos en termino en el diccionario del field
-                    res = self.get_permuterm(term)
-                else:
-                    res = None
-            
-        elif(self.use_positional):
-            if(field is None):
-                if term in self.index["all"]:                         #si no se especifica field buscamos en el diccionario donde solo estan los terminos
-                    res = self.get_positionals(term)
-                else:
-                    res = None
-            else:
-                if term in self.index[field]:                          #si se especifica el field buscamos en termino en el diccionario del field
-                    res = self.get_positionals(term)
-                else:
-                    res = None
-        """
+                return self.index[field].get(term)
        
 
-        print(term+str(res))
-        return res                                              
-        
-
-    def get_positionals(self, terms:str, field):
+    def get_positionals(self, terms, field: Optional[str]=None):
         """
 
         Devuelve la posting list asociada a una secuencia de terminos consecutivos.
@@ -655,14 +692,12 @@ class SAR_Indexer:
         if field is not None:
             if stem in self.sindex[field]:
                 for token in self.sindex[field][stem]:
-                    
                     res = self.or_posting(                      # Se utiliza el OR propio
                         res, list(self.index[field][token]))
             # print(res)
         else:
             if stem in self.sindex["all"]:
                 for token in self.sindex["all"].get(stem):
-                    print(token)
                     res = self.or_posting(                      # Se utiliza el OR propio
                         res, self.index["all"].get(token))
         
@@ -681,13 +716,12 @@ class SAR_Indexer:
         return: posting list
 
         """
-
         ##################################################
         ## COMPLETAR PARA FUNCIONALIDAD EXTRA PERMUTERM ##
         ##################################################
 
         res=set()
-        term = term.lower()  # Convertimod el término a minúsculas
+        term = term.lower()  # Convertimos el término a minúsculas
         term += "$"  # Agregamos $ al final
 
         for i in range(len(term)):
@@ -715,7 +749,6 @@ class SAR_Indexer:
         return: posting list con todos los artid exceptos los contenidos en p
 
         """
-       
         reverse = []
         noticias = self.articles.keys()
         for doc in noticias:
