@@ -870,8 +870,20 @@ class SAR_Indexer:
 
         """
         r = self.solve_query(query)
-        print('query: ' + query)
-        print('num results: ' + str(len(r)))
+        print("========================================")
+        for i, res in enumerate(r, 1):
+            aux = self.articles[res][1]
+
+            if self.show_snippet:
+                print(" ")
+            else:
+                print('#{:<4} ({})'.format(
+                    i, res, aux))
+            if not self.show_all and i >= self.SHOW_MAX:
+                break
+        print("========================================")
+        print('Number of results: ' + str(len(r)))
+        return str(len(r))
     
 
 
