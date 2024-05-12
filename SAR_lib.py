@@ -243,42 +243,44 @@ class SAR_Indexer:
         for i, line in enumerate(open(filename)):
             j = self.parse_article(line)
             artid = len(self.articles) + 1
+            if(self.already_in_index(j)):
+                continue
+            else:
+                self.urls.add(j['url'])
 
             if self.multifield:
                 multiSet = self.fields
             else:
                 multiSet = [self.fields[0]]                             #comprobamos si tenemos que hacer una indexación multicampo...
             for field, allow in multiSet:                               #en ese caso, hacemos un índice por campo           
-                if(not self.already_in_index(j)):
-                    self.articles[artid] = (len(self.docs),i)           #metemos el articulo en el diccionario si no estaba ya indexado
+                self.articles[artid] = (len(self.docs),i)           #metemos el articulo en el diccionario si no estaba ya indexado
+                txt = j[field]                                      #asignamos a txt todo el texto del articulo j
+                if allow: 
+                    txt = txt.lower()                               #lo pasamos a minuscula
+                    txt = self.tokenizer.split(txt)                 #eliminamos todos los terminos no alfanumericos si el campo lo permite
                 
-                    txt = j[field]                                      #asignamos a txt todo el texto del articulo j
-                    if allow: 
-                        txt = txt.lower()                               #lo pasamos a minuscula
-                        txt = self.tokenizer.split(txt)                 #eliminamos todos los terminos no alfanumericos si el campo lo permite
-                    
-                        if self.positional:
-                            for term in txt:                                                   #asociamos una lista a cada término
-                                if term not in self.index[field]:
-                                    self.index[field][term] = {}                             #si buscamos índices posicionales...
-                            for pos, term in enumerate(txt):
+                    if self.positional:
+                        for term in txt:                                                   #asociamos una lista a cada término
+                            if term not in self.index[field]:
+                                self.index[field][term] = {}                             #si buscamos índices posicionales...
+                        for pos, term in enumerate(txt):
+                            if artid not in self.index[field][term]: 
+                                self.index[field][term][artid] = [pos]
+                            if pos not in self.index[field][term][artid]:                   #para cada entrada (termino) del dicc vamos añadiendo los articulos en los que salen
+                                self.index[field][term][artid].append(pos)
+                    else:
+                        for term in txt:                                                   #asociamos una lista a cada término
+                            if term not in self.index[field]:
+                                self.index[field][term] = []
+                            for term in txt:
                                 if artid not in self.index[field][term]: 
-                                    self.index[field][term][artid] = [pos]
-                                if pos not in self.index[field][term][artid]:                   #para cada entrada (termino) del dicc vamos añadiendo los articulos en los que salen
-                                    self.index[field][term][artid].append(pos)
-                        else:
-                            for term in txt:                                                   #asociamos una lista a cada término
-                                if term not in self.index[field]:
-                                    self.index[field][term] = []
-                                for term in txt:
-                                    if artid not in self.index[field][term]: 
-                                        self.index[field][term].append(artid)
-            
-                    else:                                                       #tratamiento especial para los términos no tokenizados
-                        if txt not in self.index[field]:
-                            self.index[field][txt] = []  
-                        if txt not in self.index[field][txt]: 
-                            self.index[field][txt].append(artid)
+                                    self.index[field][term].append(artid)
+        
+                else:                                                       #tratamiento especial para los términos no tokenizados
+                    if txt not in self.index[field]:
+                        self.index[field][txt] = []  
+                    if txt not in self.index[field][txt]: 
+                        self.index[field][txt].append(artid)
 
         # print(self.index)
         self.docs[len(self.docs)] = os.path.dirname(filename)   #añadimos el documento como procesado en el diccionario
@@ -391,23 +393,23 @@ class SAR_Indexer:
         if self.permuterm:
             print("----------------------------------------")
             if not self.multifield:
-                print("PERMUTEM:")
+                print("PERMUTERMS:")
                 print("\t# of permutem in '': ", len(self.ptindex['all']))
             else:
-                print("PERMUTEM:")
-                print("\t# of permutem in 'all': ", len(self.ptindex['all']))
-                print("\t# of permutem in 'title': ", len(self.ptindex['title']))
-                print("\t# of permutem in 'summary': ", len(self.ptindex['summary']))
-                print("\t# of permutem in 'section': ", len(self.ptindex['section-name']))
-                print("\t# of permutem in 'url': ", len(self.ptindex['url']))
+                print("PERMUTERMS:")
+                print("\t# of permuterm in 'all': ", len(self.ptindex['all']))
+                print("\t# of permuterm in 'title': ", len(self.ptindex['title']))
+                print("\t# of permuterm in 'summary': ", len(self.ptindex['summary']))
+                print("\t# of permuterm in 'section': ", len(self.ptindex['section-name']))
+                print("\t# of permuterm in 'url': ", len(self.ptindex['url']))
 
         if self.stemming:
             print("----------------------------------------")
             if not self.multifield:
-                print("STEMMING:")
+                print("STEMS:")
                 print("\t# of stems in 'all': ", len(self.sindex['all']))
             else:
-                print("STEMMING:")
+                print("STEMS:")
                 print("\t# of stems in 'all': ", len(self.sindex['all']))
                 print("\t# of stems in 'title': ", len(self.sindex['title']))
                 print("\t# of stems in 'summary': ", len(self.sindex['summary']))
@@ -451,10 +453,11 @@ class SAR_Indexer:
         return: posting list con el resultado de la query
 
         """
-        print (query)
         if query is None or len(query) == 0:
             return []
-        else:   
+        else:
+            # en nuestra implementación ignoramos los ""
+            query = query.replace('"', '')
             # Tokenizamos las keywords y los paréntesis de la frase
             tokenList = re.split(r'\bAND\b|\bOR\b|\bAND NOT\b|\bOR NOT\b|\bNOT\b|[()]', query)
             tokenList = [re.sub(r'^\s+|\s+$', '', token) for token in tokenList if token.strip()]
@@ -489,7 +492,6 @@ class SAR_Indexer:
             lastOpen = 0; firstClosed = 0
             # Mientras haya un par de paréntesis, tendremos que seguir operando para deshacernos de ellos.
             while self.count_parentheses(tokenizedList) > 0:
-                print(tokenizedList)
                 if self.count_parentheses(tokenizedList) % 2 != 0: print("Error de input - paréntesis impares."); return []
                 for index, token in enumerate(tokenizedList):
                     if token == "(":
