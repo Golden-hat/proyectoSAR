@@ -59,6 +59,7 @@ class SAR_Indexer:
         self.counterFiles = 0
         self.use_positional = False
         self.use_permuterm = False
+       
 
 
     ###############################
@@ -272,9 +273,9 @@ class SAR_Indexer:
                         for term in txt:                                                   #asociamos una lista a cada término
                             if term not in self.index[field]:
                                 self.index[field][term] = []
-                            for term in txt:
-                                if artid not in self.index[field][term]: 
-                                    self.index[field][term].append(artid)
+                            #for term in txt:
+                            if artid not in self.index[field][term]: 
+                                self.index[field][term].append(artid)
         
                 else:                                                       #tratamiento especial para los términos no tokenizados
                     if txt not in self.index[field]:
@@ -459,36 +460,51 @@ class SAR_Indexer:
             # en nuestra implementación ignoramos los ""
             query = query.replace('"', '')
             # Tokenizamos las keywords y los paréntesis de la frase
-            tokenList = re.split(r'\bAND\b|\bOR\b|\bAND NOT\b|\bOR NOT\b|\bNOT\b|[()]', query)
+            tokenList = re.split(r'\bAND\b|\bOR\b|\bAND NOT\b|\bOR NOT\b|\bNOT\b|[()]|\btitle:\b|\bsummary:\b|\bsection-name:\b', query)
             tokenList = [re.sub(r'^\s+|\s+$', '', token) for token in tokenList if token.strip()]
 
             separators = re.findall(r'\bAND\b|\bOR\b|\bAND NOT\b|\bOR NOT\b|\bNOT\b|[()]', query)
             separators = [token for token in separators if token.strip()]
 
+            fields = re.findall(r'\btitle:\b|\bsummary:\b|\bsection-name:\b', query)
+            fields = [token for token in fields if token.strip()]
+            #fields = [field.replace(':', '') for field in fields]
+
             # Luego juntamos listas de separador y tokens
             tokenizedList = []
             
-            i = 0; j = 0; word = ""
+            i = 0; j = 0;k=0; word = ""
             for letter in query:
                 word += letter
                 if(i < len(tokenList) and re.sub(r'^\s+|\s+$', '', word) == tokenList[i]): 
                     tokenizedList.append(tokenList[i]); word = ""; i+= 1; 
                 if(j < len(separators) and re.sub(r'^\s+|\s+$', '', word) == separators[j]): 
                     tokenizedList.append(separators[j]); word = ""; j+= 1
+                if(k < len(fields) and re.sub(r'^\s+|\s+$', '', word) == fields[k]): 
+                    tokenizedList.append(fields[k]); word = ""; k+= 1    
 
+               
+
+            fields = []
             for i, t in enumerate(tokenizedList):
-                if t not in ['(', "OR NOT", "AND NOT", "AND", "OR", 'NOT', ')']:
-                    tokenizedList[i] = self.get_posting_or_positionals(t)
+                if t in ['title:', 'summary:', 'section-name:']:
+                    fields.append(t)
+                if t not in ['(', "OR NOT", "AND NOT", "AND", "OR", 'NOT', ')', 'title:', 'summary:', 'section-name:']:
+                    if len(fields)==0:
+                        tokenizedList[i] = self.get_posting_or_positionals(t,None)
+                    else:
+                        tokenizedList[i] = self.get_posting_or_positionals(t, fields[0].replace(':', ''))
+                        fields.pop(0)
                     # Hemos de convertir a lista todos los diccionarios posicionales (cuando se utiliza la opción 
                     # -P para generar el binario de búsqueda esto es necesario para evitar una excepción)
                     if isinstance(tokenizedList[i], dict): tokenizedList[i] = [key for key in tokenizedList[i]]
-            
+            tokenizedList = [t for t in tokenizedList if t not in ['title:', 'summary:', 'section-name:']]
             # añadimos paréntesis tanto al final como al principio para que la implementación funcione correctamente
             # es necesario porque cuando se evaluan todas las operaciones nesteadas por paréntesis de niveles más altos
             # falta por tratar el nivel más bajo, el cual no es accesible si la query no está envuelta en paréntesis.
             tokenizedList.append(")")
             tokenizedList.insert(0, "(")
-
+            
             lastOpen = 0; firstClosed = 0
             # Mientras haya un par de paréntesis, tendremos que seguir operando para deshacernos de ellos.
             while self.count_parentheses(tokenizedList) > 0:
@@ -548,14 +564,15 @@ class SAR_Indexer:
         return posting_list
 
     # Método auxiliar para los posting, para los stemming ó para las consultas normales (falta permuterm)
-    def get_posting_or_positionals(self, token):
+    def get_posting_or_positionals(self, token,field):
         if ' ' in token:
             self.use_positional = True
             self.use_stemming = False
         else:
             self.use_positional = False 
-        if self.get_posting(token, None) == None: return []
-        return self.get_posting(token, None)
+        
+        if self.get_posting(token, field) == None: return []
+        return self.get_posting(token, field)
 
     # Método que devuelve el nº de paréntesis de una lista
     def count_parentheses(self, tokens):
