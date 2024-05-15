@@ -57,6 +57,9 @@ class SAR_Indexer:
         self.use_ranking = False  # valor por defecto, se cambia con self.set_ranking()
         # añadimos contadores que nos ayudarán a imprimir por pantalla los stats de la indexación
         self.counterFiles = 0
+        self.use_positional = False
+        self.use_permuterm = False
+       
 
 
     ###############################
@@ -241,42 +244,44 @@ class SAR_Indexer:
         for i, line in enumerate(open(filename)):
             j = self.parse_article(line)
             artid = len(self.articles) + 1
+            if(self.already_in_index(j)):
+                continue
+            else:
+                self.urls.add(j['url'])
 
             if self.multifield:
                 multiSet = self.fields
             else:
                 multiSet = [self.fields[0]]                             #comprobamos si tenemos que hacer una indexación multicampo...
             for field, allow in multiSet:                               #en ese caso, hacemos un índice por campo           
-                if(not self.already_in_index(j)):
-                    self.articles[artid] = (len(self.docs),i)           #metemos el articulo en el diccionario si no estaba ya indexado (docid, line)
+                self.articles[artid] = (len(self.docs),i)           #metemos el articulo en el diccionario si no estaba ya indexado
+                txt = j[field]                                      #asignamos a txt todo el texto del articulo j
+                if allow: 
+                    txt = txt.lower()                               #lo pasamos a minuscula
+                    txt = self.tokenizer.split(txt)                 #eliminamos todos los terminos no alfanumericos si el campo lo permite
                 
-                    txt = j[field]                                      #asignamos a txt todo el texto del articulo j
-                    if allow: 
-                        txt = txt.lower()                               #lo pasamos a minuscula
-                        txt = self.tokenizer.split(txt)                 #eliminamos todos los terminos no alfanumericos si el campo lo permite
-                    
-                        if self.positional:
-                            for term in txt:                                                   #asociamos una lista a cada término
-                                if term not in self.index[field]:
-                                    self.index[field][term] = {}                             #si buscamos índices posicionales...
-                            for pos, term in enumerate(txt):
-                                if artid not in self.index[field][term]: 
-                                    self.index[field][term][artid] = [pos]
-                                if pos not in self.index[field][term][artid]:                   #para cada entrada (termino) del dicc vamos añadiendo los articulos en los que salen
-                                    self.index[field][term][artid].append(pos)
-                        else:
-                            for term in txt:                                                   #asociamos una lista a cada término
-                                if term not in self.index[field]:
-                                    self.index[field][term] = []
-                                for term in txt:
-                                    if artid not in self.index[field][term]: 
-                                        self.index[field][term].append(artid)
-            
-                    else:                                                       #tratamiento especial para los términos no tokenizados
-                        if txt not in self.index[field]:
-                            self.index[field][txt] = []  
-                        if txt not in self.index[field][txt]: 
-                            self.index[field][txt].append(artid)
+                    if self.positional:
+                        for term in txt:                                                   #asociamos una lista a cada término
+                            if term not in self.index[field]:
+                                self.index[field][term] = {}                             #si buscamos índices posicionales...
+                        for pos, term in enumerate(txt):
+                            if artid not in self.index[field][term]: 
+                                self.index[field][term][artid] = [pos]
+                            if pos not in self.index[field][term][artid]:                   #para cada entrada (termino) del dicc vamos añadiendo los articulos en los que salen
+                                self.index[field][term][artid].append(pos)
+                    else:
+                        for term in txt:                                                   #asociamos una lista a cada término
+                            if term not in self.index[field]:
+                                self.index[field][term] = []
+                            #for term in txt:
+                            if artid not in self.index[field][term]: 
+                                self.index[field][term].append(artid)
+        
+                else:                                                       #tratamiento especial para los términos no tokenizados
+                    if txt not in self.index[field]:
+                        self.index[field][txt] = []  
+                    if txt not in self.index[field][txt]: 
+                        self.index[field][txt].append(artid)
 
         # print(self.index)
         self.docs[len(self.docs)] = os.path.dirname(filename)   #añadimos el documento como procesado en el diccionario
@@ -389,23 +394,23 @@ class SAR_Indexer:
         if self.permuterm:
             print("----------------------------------------")
             if not self.multifield:
-                print("PERMUTEM:")
+                print("PERMUTERMS:")
                 print("\t# of permutem in '': ", len(self.ptindex['all']))
             else:
-                print("PERMUTEM:")
-                print("\t# of permutem in 'all': ", len(self.ptindex['all']))
-                print("\t# of permutem in 'title': ", len(self.ptindex['title']))
-                print("\t# of permutem in 'summary': ", len(self.ptindex['summary']))
-                print("\t# of permutem in 'section': ", len(self.ptindex['section-name']))
-                print("\t# of permutem in 'url': ", len(self.ptindex['url']))
+                print("PERMUTERMS:")
+                print("\t# of permuterm in 'all': ", len(self.ptindex['all']))
+                print("\t# of permuterm in 'title': ", len(self.ptindex['title']))
+                print("\t# of permuterm in 'summary': ", len(self.ptindex['summary']))
+                print("\t# of permuterm in 'section': ", len(self.ptindex['section-name']))
+                print("\t# of permuterm in 'url': ", len(self.ptindex['url']))
 
         if self.stemming:
             print("----------------------------------------")
             if not self.multifield:
-                print("STEMMING:")
+                print("STEMS:")
                 print("\t# of stems in 'all': ", len(self.sindex['all']))
             else:
-                print("STEMMING:")
+                print("STEMS:")
                 print("\t# of stems in 'all': ", len(self.sindex['all']))
                 print("\t# of stems in 'title': ", len(self.sindex['title']))
                 print("\t# of stems in 'summary': ", len(self.sindex['summary']))
@@ -434,7 +439,7 @@ class SAR_Indexer:
     ###################################
 
 
-    def solve_query(self, query:str, prev:Dict={}):
+    def solve_query(self, query:str, prev:List={}):
         """
         NECESARIO PARA TODAS LAS VERSIONES
 
@@ -449,50 +454,136 @@ class SAR_Indexer:
         return: posting list con el resultado de la query
 
         """
-        print (query)
         if query is None or len(query) == 0:
             return []
         else:
-            # Realiza el parsing de la query
-            tokens = re.split(r'(\bAND\b|\bOR\b|\bNOT\b|\bAND NOT\b|\bOR NOT\b)', query)
-            tokens = [token.strip() for token in tokens if token.strip()]  # Remove empty strings and strip whitespace
-            print (tokens)
-            posting_list = []
-            print(tokens)
-            # Recorre la lista de tokens para evaluar la query
-            i = 0
-            while i < len(tokens):
-                if tokens[i] == "AND":
-                    if i + 1 < len(tokens) and tokens[i + 1] == "NOT":
-                        posting_list = self.and_posting(posting_list, self.reverse_posting(self.get_posting_or_positionals(tokens[i + 2])))
-                        i += 3
-                    else:
-                        posting_list = self.and_posting(posting_list, self.get_posting_or_positionals(tokens[i + 1]))
-                        i += 2
-                elif tokens[i] == "OR":
-                    if i + 1 < len(tokens) and tokens[i + 1] == "NOT":
-                        posting_list = self.or_posting(posting_list, self.reverse_posting(self.get_posting_or_positionals(tokens[i + 2])))
-                        i += 3
-                    else:
-                        posting_list = self.or_posting(posting_list, self.get_posting_or_positionals(tokens[i + 1]))
-                        i += 2
-                elif tokens[i] == "NOT":
-                    posting_list = self.reverse_posting(self.get_posting_or_positionals(tokens[i + 1]))
-                    i += 2
-                else:
-                    posting_list = self.get_posting_or_positionals(tokens[i])
-                    i += 1
-            return posting_list
-                    
-        ########################################
-        ## COMPLETAR PARA TODAS LAS VERSIONES ##
-        ########################################
+            # en nuestra implementación ignoramos los ""
+            query = query.replace('"', '')
+            # Tokenizamos las keywords y los paréntesis de la frase
+            tokenList = re.split(r'\bAND\b|\bOR\b|\bAND NOT\b|\bOR NOT\b|\bNOT\b|[()]|\btitle:\b|\bsummary:\b|\bsection-name:\b', query)
+            tokenList = [re.sub(r'^\s+|\s+$', '', token) for token in tokenList if token.strip()]
 
-    def get_posting_or_positionals(self, token):
+            separators = re.findall(r'\bAND\b|\bOR\b|\bAND NOT\b|\bOR NOT\b|\bNOT\b|[()]', query)
+            separators = [token for token in separators if token.strip()]
+
+            fields = re.findall(r'\btitle:\b|\bsummary:\b|\bsection-name:\b', query)
+            fields = [token for token in fields if token.strip()]
+            #fields = [field.replace(':', '') for field in fields]
+
+            # Luego juntamos listas de separador y tokens
+            tokenizedList = []
+            
+            i = 0; j = 0;k=0; word = ""
+            for letter in query:
+                word += letter
+                if(i < len(tokenList) and re.sub(r'^\s+|\s+$', '', word) == tokenList[i]): 
+                    tokenizedList.append(tokenList[i]); word = ""; i+= 1; 
+                if(j < len(separators) and re.sub(r'^\s+|\s+$', '', word) == separators[j]): 
+                    tokenizedList.append(separators[j]); word = ""; j+= 1
+                if(k < len(fields) and re.sub(r'^\s+|\s+$', '', word) == fields[k]): 
+                    tokenizedList.append(fields[k]); word = ""; k+= 1    
+
+               
+
+            fields = []
+            for i, t in enumerate(tokenizedList):
+                if t in ['title:', 'summary:', 'section-name:']:
+                    fields.append(t)
+                if t not in ['(', "OR NOT", "AND NOT", "AND", "OR", 'NOT', ')', 'title:', 'summary:', 'section-name:']:
+                    if len(fields)==0:
+                        tokenizedList[i] = self.get_posting_or_positionals(t,None)
+                    else:
+                        tokenizedList[i] = self.get_posting_or_positionals(t, fields[0].replace(':', ''))
+                        fields.pop(0)
+                    # Hemos de convertir a lista todos los diccionarios posicionales (cuando se utiliza la opción 
+                    # -P para generar el binario de búsqueda esto es necesario para evitar una excepción)
+                    if isinstance(tokenizedList[i], dict): tokenizedList[i] = [key for key in tokenizedList[i]]
+            tokenizedList = [t for t in tokenizedList if t not in ['title:', 'summary:', 'section-name:']]
+            # añadimos paréntesis tanto al final como al principio para que la implementación funcione correctamente
+            # es necesario porque cuando se evaluan todas las operaciones nesteadas por paréntesis de niveles más altos
+            # falta por tratar el nivel más bajo, el cual no es accesible si la query no está envuelta en paréntesis.
+            tokenizedList.append(")")
+            tokenizedList.insert(0, "(")
+            
+            lastOpen = 0; firstClosed = 0
+            # Mientras haya un par de paréntesis, tendremos que seguir operando para deshacernos de ellos.
+            while self.count_parentheses(tokenizedList) > 0:
+                if self.count_parentheses(tokenizedList) % 2 != 0: print("Error de input - paréntesis impares."); return []
+                for index, token in enumerate(tokenizedList):
+                    if token == "(":
+                        lastOpen = index
+                    if token == ")":
+                        firstClosed = index
+                        content = tokenizedList[lastOpen+1:firstClosed]
+                        if firstClosed - lastOpen > 2:
+                            # Eliminamos todo el contenido entre paréntesis inclusive y lo sustituimos en la posición
+                            # por el resultado de la subquery
+                            for i in range(firstClosed - lastOpen):
+                                tokenizedList.pop(lastOpen)
+                            tokenizedList[lastOpen] = self.evaluate(content)
+                        else:
+                            # Si solo hay un término entre paréntesis, simplemente los eliminamos y dejamos el término
+                            # (recordemos que sería una lista) intacto
+                            tokenizedList.pop(lastOpen)
+                            # Hemos de comprobar si tenemos que eliminar el último paréntesis y el primero, ya que
+                            # al eliminar su correspondiente, la longitud cambia y se convierte en firstClosed -1
+                            if firstClosed == len(tokenizedList):
+                                tokenizedList.pop()
+                            else:
+                                tokenizedList.pop(firstClosed-1) 
+                        # Salimos del bucle para volver a encontrar la encapsulación más cercana por la izquierda
+                        break
+            # Flatten, ya que se devuelve el resultado en una lista de listas
+            tokenizedList = [item for sublist in tokenizedList for item in sublist]
+            return tokenizedList
+
+    # Evalúa los contenidos de la "sub-query" contenida entre paréntesis que se le pasa
+    def evaluate(self, tokens):
+        i = 0
+        while i < len(tokens):
+            if tokens[i] == "AND":
+                if i + 1 < len(tokens) and tokens[i + 1] == "NOT":
+                    posting_list = self.and_posting(posting_list, self.reverse_posting(tokens[i + 2]))
+                    i += 3
+                else:
+                    posting_list = self.and_posting(posting_list, tokens[i + 1])
+                    i += 2
+            elif tokens[i] == "OR":
+                if i + 1 < len(tokens) and tokens[i + 1] == "NOT":
+                    posting_list = self.or_posting(posting_list, self.reverse_posting(tokens[i + 2]))
+                    i += 3
+                else:
+                    posting_list = self.or_posting(posting_list, tokens[i + 1])
+                    i += 2
+            elif tokens[i] == "NOT":
+                posting_list = self.reverse_posting(tokens[i + 1])
+                i += 2
+            else:
+                posting_list = tokens[i]
+                i += 1
+        return posting_list
+
+    # Método auxiliar para los posting, para los stemming ó para las consultas normales (falta permuterm)
+    def get_posting_or_positionals(self, token,field):
         if ' ' in token:
-            return self.get_positionals(token, None)
+            self.use_positional = True
+            self.use_stemming = False
         else:
-            return self.get_posting(token, None)
+            self.use_positional = False 
+        
+        if self.get_posting(token, field) == None: return []
+        return self.get_posting(token, field)
+
+    # Método que devuelve el nº de paréntesis de una lista
+    def count_parentheses(self, tokens):
+        open_count = 0
+        close_count = 0
+
+        for token in tokens:
+            if token == "(": open_count += 1
+            if token == ")": close_count += 1
+    
+        return open_count+close_count
         
     def get_posting(self, term:str, field:Optional[str]=None):
         """
@@ -512,64 +603,29 @@ class SAR_Indexer:
         NECESARIO PARA TODAS LAS VERSIONES
 
         """
-        ########################################
-        ## COMPLETAR PARA TODAS LAS VERSIONES ##
-        ########################################
         if (self.use_stemming):
-            if(field is None):
-                if term in self.index["all"]:                         #si no se especifica field buscamos en el diccionario donde solo estan los terminos
-                    res = self.get_stemming(term)
-                else:
-                    res = None
-            else:
-                if term in self.index[field]:                          #si se especifica el field buscamos en termino en el diccionario del field
-                    res = self.get_stemming(term)
-                else:
-                    res = None
-
+            if(field is None):                    #si no se especifica field buscamos en el diccionario donde solo estan los terminos
+                return self.get_stemming(term)
+            else:                     
+                return self.get_stemming(term, field)
+        elif(self.use_permuterm):
+            if(field is None):                     #si no se especifica field buscamos en el diccionario donde solo estan los terminos
+                return self.get_permuterm(term)
+            else:                       
+                return self.get_permuterm(term, field) 
+        elif(self.use_positional):
+            if(field is None):                       #si no se especifica field buscamos en el diccionario donde solo estan los terminos
+                return self.get_positionals(term)
+            else:                          
+                return self.get_positionals(term, field) 
         else:
             if(field is None):
-                if term in self.index["all"]:                         #si no se especifica field buscamos en el diccionario donde solo estan los terminos
-                    res = self.index["all"].get(term)
-                else:
-                    res = None
+                return self.index["all"].get(term)
             else:
-                if term in self.index[field]:                          #si se especifica el field buscamos en termino en el diccionario del field
-                    res = self.index[field].get(term)
-                else:
-                    res = None
-        """    
-        elif(self.use_permuterm):
-            if(field is None):
-                if term in self.index["all"]:                         #si no se especifica field buscamos en el diccionario donde solo estan los terminos
-                    res = self.get_permuterm(term)
-                else:
-                    res = None
-            else:
-                if term in self.index[field]:                          #si se especifica el field buscamos en termino en el diccionario del field
-                    res = self.get_permuterm(term)
-                else:
-                    res = None
-            
-        elif(self.use_positional):
-            if(field is None):
-                if term in self.index["all"]:                         #si no se especifica field buscamos en el diccionario donde solo estan los terminos
-                    res = self.get_positionals(term)
-                else:
-                    res = None
-            else:
-                if term in self.index[field]:                          #si se especifica el field buscamos en termino en el diccionario del field
-                    res = self.get_positionals(term)
-                else:
-                    res = None
-        """
+                return self.index[field].get(term)
        
 
-        print(term+str(res))
-        return res                                              
-        
-
-    def get_positionals(self, terms:str, field):
+    def get_positionals(self, terms, field: Optional[str]=None):
         """
 
         Devuelve la posting list asociada a una secuencia de terminos consecutivos.
@@ -655,14 +711,12 @@ class SAR_Indexer:
         if field is not None:
             if stem in self.sindex[field]:
                 for token in self.sindex[field][stem]:
-                    
                     res = self.or_posting(                      # Se utiliza el OR propio
                         res, list(self.index[field][token]))
             # print(res)
         else:
             if stem in self.sindex["all"]:
                 for token in self.sindex["all"].get(stem):
-                    print(token)
                     res = self.or_posting(                      # Se utiliza el OR propio
                         res, self.index["all"].get(token))
         
@@ -681,13 +735,12 @@ class SAR_Indexer:
         return: posting list
 
         """
-
         ##################################################
         ## COMPLETAR PARA FUNCIONALIDAD EXTRA PERMUTERM ##
         ##################################################
 
         res=set()
-        term = term.lower()  # Convertimod el término a minúsculas
+        term = term.lower()  # Convertimos el término a minúsculas
         term += "$"  # Agregamos $ al final
 
         for i in range(len(term)):
@@ -715,7 +768,6 @@ class SAR_Indexer:
         return: posting list con todos los artid exceptos los contenidos en p
 
         """
-       
         reverse = []
         noticias = self.articles.keys()
         for doc in noticias:

@@ -19,7 +19,6 @@ if __name__ == "__main__":
     parser.add_argument('-S', '--stem', dest='stem', action='store_true', default=False, 
                     help='use stem index by default.')
 
-
     group0 = parser.add_mutually_exclusive_group()
     
     group0.add_argument('-N', '--snippet', dest='snippet', action='store_true', default=False, 
