@@ -248,7 +248,7 @@ class SAR_Indexer:
                 multiSet = [self.fields[0]]                             #comprobamos si tenemos que hacer una indexación multicampo...
             for field, allow in multiSet:                               #en ese caso, hacemos un índice por campo           
                 if(not self.already_in_index(j)):
-                    self.articles[artid] = (len(self.docs),i)           #metemos el articulo en el diccionario si no estaba ya indexado
+                    self.articles[artid] = (len(self.docs),i)           #metemos el articulo en el diccionario si no estaba ya indexado (docid, line)
                 
                     txt = j[field]                                      #asignamos a txt todo el texto del articulo j
                     if allow: 
@@ -874,11 +874,38 @@ class SAR_Indexer:
         for i, res in enumerate(r, 1):
             aux = self.articles[res][1]
 
-            if self.show_snippet:
-                print(" ")
-            else:
-                print('#{:<4} ({})'.format(
+            print('#{:<4} ({})'.format(
                     i, res, aux))
+            if(self.show_snippet):
+                text = ""
+                
+                tokens = re.split(r'(\bAND\b|\bOR\b|\bNOT\b|\bAND NOT\b|\bOR NOT\b)', query)
+                tokens = [token.strip() for token in tokens if token.strip()]                     #dejamos solo las palabras clave de la query
+
+                line = self.articles[res][1]           #accedemos al segundo elemento de la tupla del articulo (la linea) !POSIBLE CAMBIO LINEA 875
+                docpath  = self.docs[aux]
+                with open (docpath,'r') as file:              #para leer el texto del articulo sacamos el path del doc que lo contiene y hacemos dicc con el que sacamos su cuerpo
+                    for j,article in enumerate(file):          #vamos recorriendo las lineas (articulos) del doc. cuando sea la del nuestro parseamos ese articulo
+                        if(line == j):
+                            cuerpo = self.parse_article(article)["summary"]               #cuando ya tenemos la linea del articulo en el docid sacamos todo el texto con el parse.article
+                for palabra in tokens: 
+                    snippet = ""                                          #para cada palabra de la query buscamos su primera ocurrencia 
+                    indice = cuerpo.find(palabra)
+                    if indice != 0:
+                        inicio = max(0,indice-5)        #añadimos 5 palabras por delante y 5 por detras de contexto. PARA CAMBIAR CONTEXTO CAMBIAR 5 POR OTRO
+                    else:
+                        inicio = indice
+                    
+                    if indice != len(cuerpo):                 #CAMBIAR
+                        final = min(len(cuerpo),indice + len(palabra) + 5)    #CAMBIAR?
+                    else:
+                        final = indice
+                    snippet = cuerpo[inicio:final] 
+                text += snippet + "... " 
+        
+
+
+
             if not self.show_all and i >= self.SHOW_MAX:
                 break
         print("========================================")
