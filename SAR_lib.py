@@ -177,6 +177,7 @@ class SAR_Indexer:
         self.permuterm = args['permuterm']
 
         file_or_dir = Path(root)
+        print(file_or_dir)
         
         if file_or_dir.is_file():
             # is a file
@@ -283,8 +284,9 @@ class SAR_Indexer:
                     if txt not in self.index[field][txt]: 
                         self.index[field][txt].append(artid)
 
-        # print(self.index)
-        self.docs[len(self.docs)] = os.path.dirname(filename)   #añadimos el documento como procesado en el diccionario
+            #print(filename)
+            self.docs[len(self.docs)] = filename
+       # self.docs[len(self.docs)] = os.path.dirname(filename)   #añadimos el documento como procesado en el diccionario
 
 
     def set_stemming(self, v:bool):
@@ -924,7 +926,7 @@ class SAR_Indexer:
         r = self.solve_query(query)
         print("========================================")
         for i, res in enumerate(r, 1):
-            aux = self.articles[res][1]
+            aux = self.articles[res][0]
 
             print('#{:<4} ({})'.format(
                     i, res, aux))
@@ -934,12 +936,17 @@ class SAR_Indexer:
                 tokens = re.split(r'(\bAND\b|\bOR\b|\bNOT\b|\bAND NOT\b|\bOR NOT\b)', query)
                 tokens = [token.strip() for token in tokens if token.strip()]                     #dejamos solo las palabras clave de la query
 
-                line = self.articles[res][1]           #accedemos al segundo elemento de la tupla del articulo (la linea) !POSIBLE CAMBIO LINEA 875
-                docpath  = self.docs[aux]
-                with open (docpath,'r') as file:              #para leer el texto del articulo sacamos el path del doc que lo contiene y hacemos dicc con el que sacamos su cuerpo
+                line = self.articles[res][1]           #accedemos al segundo elemento de la tupla del articulo (docid, linea) !POSIBLE CAMBIO LINEA  aux = self.articles[res][1]
+                docpath  = self.docs[aux]              #aux == docid       res = artid
+                print(f"El docid es {aux}")
+                print(f"La linea es {line}")
+                print(f"El path es {docpath}")
+
+                with open (docpath,'rb') as file:              #para leer el texto del articulo sacamos el path del doc que lo contiene y hacemos dicc con el que sacamos su cuerpo
                     for j,article in enumerate(file):          #vamos recorriendo las lineas (articulos) del doc. cuando sea la del nuestro parseamos ese articulo
                         if(line == j):
                             cuerpo = self.parse_article(article)["summary"]               #cuando ya tenemos la linea del articulo en el docid sacamos todo el texto con el parse.article
+                
                 for palabra in tokens: 
                     snippet = ""                                          #para cada palabra de la query buscamos su primera ocurrencia 
                     indice = cuerpo.find(palabra)
