@@ -359,6 +359,8 @@ class SAR_Indexer:
 
 
         """
+        self.use_permuterm = True
+        
         if self.multifield:
             multifield = ["all", "title", "summary", "section-name", 'url']
         else:
@@ -366,13 +368,12 @@ class SAR_Indexer:
 
         for field in multifield:
             for key in self.index[field]:
-                for i in range(len(key)+1):
-                    permutem = key[:i]+"$"+key[i:]
-                    if permutem not in self.ptindex[field]:
-                        self.ptindex[field][permutem] = [permutem]
-                    else:
-                        if key not in self.ptindex[field][permutem]:
-                            self.ptindex[field][permutem] += [permutem]
+                key2 = key + '$'
+                permutaciones = [key2[i:] + key2[:i] for i in range(len(key2))]
+                for perm in permutaciones:
+                    self.ptindex[field][perm] = key
+            #self.ptindex[field] = sorted(self.ptindex[field])        
+                    
                             
 
     def show_stats(self):
@@ -610,14 +611,18 @@ class SAR_Indexer:
         NECESARIO PARA TODAS LAS VERSIONES
 
         """
+        if "?" in term or "*" in term:  # si hay comodines en la consulta
+            self.use_permuterm= True
+        else : 
+            self.use_permuterm = False
         if (self.use_stemming):
             if(field is None):                    #si no se especifica field buscamos en el diccionario donde solo estan los terminos
                 return self.get_stemming(term)
             else:                     
                 return self.get_stemming(term, field)
         elif(self.use_permuterm):
-            if(field is None):                     #si no se especifica field buscamos en el diccionario donde solo estan los terminos
-                return self.get_permuterm(term)
+            if(field is None):   
+                return self.get_permuterm(term,"all") #si no se especifica field buscamos en el diccionario donde solo estan los terminos
             else:                       
                 return self.get_permuterm(term, field) 
         elif(self.use_positional):
@@ -745,22 +750,49 @@ class SAR_Indexer:
         ##################################################
         ## COMPLETAR PARA FUNCIONALIDAD EXTRA PERMUTERM ##
         ##################################################
-
-        res=set()
-        term = term.lower()  # Convertimos el término a minúsculas
-        term += "$"  # Agregamos $ al final
-
-        for i in range(len(term)):
-            res.add(term[i:] + term[:i])  # Ahora vamos pasando por cada posicion de term y vamos rotandolo y guardándolo en res
+        if not self.use_permuterm:
+            raise ValueError("El índice permuterm no ha sido creado. Llame a make_permuterm() primero.")
         
-        res_posting = []
-        for i in res:
-            if i in self.ptindex:
-                res_posting.append(self.ptindex[i])
+        if field not in self.ptindex:
+            raise ValueError(f"El campo '{field}' no existe en el índice permuterm.")
+        
+        term = str(term)
+        term = term.lower()
+        if "?" in term: 
+            pre = term.split('?')[0]
+            post = term.split('?')[1]
+        elif "*" in term:
+            pre = term.split('*')[0]
+            post = term.split('*')[1]
 
-        return res_posting
+        results = []
+        
+        for perm in self.ptindex[field]:
+            preP = perm.split('$')[0]
+            postP = perm.split('$')[1]
+            if "?" in term:
+                if postP.startswith(pre) and preP.endswith(post):
+                    perm2=perm.replace('$','')  
+                    if len(term) == len(perm2):  
+                        results.append(perm)       
+            elif "*" in term:
+                if postP.startswith(pre) and preP.endswith(post):
+                    results.append(perm) 
+        
+        posting_list = []
+        for term in results:
+            if self.ptindex[field].get(term) not in posting_list:
+                posting_list.append(self.ptindex[field].get(term))
+
+        posting_list= self.or_posting(posting_list, posting_list)
+        real_posting_list = []  
+        for term in posting_list:
+            print(term)
+            real_posting_list = self.or_posting(real_posting_list,self.index[field].get(term))
 
 
+        return real_posting_list  # Eliminar duplicados
+    
     def reverse_posting(self, p:list):
         """
         NECESARIO PARA TODAS LAS VERSIONES
