@@ -181,16 +181,20 @@ class SAR_Indexer:
         
         if file_or_dir.is_file():
             # is a file
+            print("File")
             self.index_file(root)
             self.counterFiles += 1
         elif file_or_dir.is_dir():
             # is a directory
+            print("directorio")
             for d, _, files in os.walk(root):
                 for filename in files:
                     if filename.endswith('.json'):
                         fullname = os.path.join(d, filename)
+                        print(fullname)
                         self.index_file(fullname)
                         self.counterFiles += 1
+            print(self.docs)
         else:
             print(f"ERROR:{root} is not a file nor directory!", file=sys.stderr)
             sys.exit(-1)
@@ -242,6 +246,7 @@ class SAR_Indexer:
 
 
         """
+        self.docs[len(self.docs)] = filename
         for i, line in enumerate(open(filename)):
             j = self.parse_article(line)
             artid = len(self.articles) + 1
@@ -284,8 +289,8 @@ class SAR_Indexer:
                     if txt not in self.index[field][txt]: 
                         self.index[field][txt].append(artid)
 
-            #print(filename)
-            self.docs[len(self.docs)] = filename
+            
+           
        # self.docs[len(self.docs)] = os.path.dirname(filename)   #añadimos el documento como procesado en el diccionario
 
 
@@ -930,43 +935,76 @@ class SAR_Indexer:
 
             print('#{:<4} ({})'.format(
                     i, res, aux))
+            
+            line = self.articles[res][1]           #accedemos al segundo elemento de la tupla del articulo (docid, linea) !POSIBLE CAMBIO LINEA  aux = self.articles[res][1]
+            docpath  = self.docs[aux-1]              #aux == docid       res = artid
+                
+                
+            
+            with open (docpath,'rb') as file:              #para leer el texto del articulo sacamos el path del doc que lo contiene y hacemos dicc con el que sacamos su cuerpo
+                for j,article in enumerate(file):          #vamos recorriendo las lineas (articulos) del doc. cuando sea la del nuestro parseamos ese articulo
+                    if(line == j):
+                        art = json.loads(article)
+                        secciones = art['sections']               #cuando ya tenemos la linea del articulo en el docid sacamos todo el texto con el parse.article
+                        url = art['url']
+                        title = art['title']
+            print(title)
+            print(url)
+            
+            
             if(self.show_snippet):
-                text = ""
+                snippets = ""
                 
                 tokens = re.split(r'(\bAND\b|\bOR\b|\bNOT\b|\bAND NOT\b|\bOR NOT\b)', query)
-                tokens = [token.strip() for token in tokens if token.strip()]                     #dejamos solo las palabras clave de la query
-
-                line = self.articles[res][1]           #accedemos al segundo elemento de la tupla del articulo (docid, linea) !POSIBLE CAMBIO LINEA  aux = self.articles[res][1]
-                docpath  = self.docs[aux]              #aux == docid       res = artid
-                print(f"El docid es {aux}")
-                print(f"La linea es {line}")
-                print(f"El path es {docpath}")
-
-                with open (docpath,'rb') as file:              #para leer el texto del articulo sacamos el path del doc que lo contiene y hacemos dicc con el que sacamos su cuerpo
-                    for j,article in enumerate(file):          #vamos recorriendo las lineas (articulos) del doc. cuando sea la del nuestro parseamos ese articulo
-                        if(line == j):
-                            cuerpo = self.parse_article(article)["summary"]               #cuando ya tenemos la linea del articulo en el docid sacamos todo el texto con el parse.article
+                tokens = [token.strip() for token in tokens if token.strip()]                     
+                tokens = [token.strip() for token in tokens if token.strip() and token.strip() not in {'AND', 'OR', 'NOT', 'AND NOT', 'OR NOT'}] #dejamos solo las palabras clave de la query
+                cuerpo = ""
                 
-                for palabra in tokens: 
+                
+                for text in secciones:
+                    cuerpo += text['text'] + " "
+                    for subtext in text['subsections']:
+                        cuerpo += subtext['text'] + " "
+                
+
+                texto_seprado = re.findall(r'\b\w+\b|[^\w\s]', cuerpo) 
+                
+                
+                for j, palabra in enumerate(tokens): 
                     snippet = ""                                          #para cada palabra de la query buscamos su primera ocurrencia 
-                    indice = cuerpo.find(palabra)
-                    if indice != 0:
-                        inicio = max(0,indice-5)        #añadimos 5 palabras por delante y 5 por detras de contexto. PARA CAMBIAR CONTEXTO CAMBIAR 5 POR OTRO
-                    else:
-                        inicio = indice
+                    indice = texto_seprado.index(palabra)
                     
-                    if indice != len(cuerpo):                 #CAMBIAR
-                        final = min(len(cuerpo),indice + len(palabra) + 5)    #CAMBIAR?
-                    else:
-                        final = indice
-                    snippet = cuerpo[inicio:final] 
-                text += snippet + "... " 
+                    
+                    inicio = max(0,indice-5)        #añadimos 5 palabras por delante y 5 por detras de contexto. PARA CAMBIAR CONTEXTO CAMBIAR 5 POR OTRO
+                    
+                    final = min(len(texto_seprado),indice + 5)    
+                    
+                    snippet = texto_seprado[inicio:final]
+                    
+                    res = []
+                    for i, elem in enumerate(snippet):
+                        if i > 0:
+                            if (snippet[i-1].isalnum() and elem.isalnum()):
+                                res.append(' ')
+
+                            elif (snippet[i-1] in ".,;:!?") and elem.isalnum():
+                                res.append(' ')
+                            res.append(elem)
+                                                                   #en este bucle for eliminamos los espacios entre 'palabra' y 'signo de puntuación'
+                    
+                    snippet = ''.join(res)
+                    snippets += snippet + " ... " 
+                snippets = "... " + snippets
+                print(snippets)
+                 
+                    
         
 
 
 
             if not self.show_all and i >= self.SHOW_MAX:
                 break
+        
         print("========================================")
         print('Number of results: ' + str(len(r)))
         return str(len(r))
