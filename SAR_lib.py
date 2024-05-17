@@ -352,6 +352,8 @@ class SAR_Indexer:
 
 
         """
+        self.use_permuterm = True
+        
         if self.multifield:
             multifield = ["all", "title", "summary", "section-name", 'url']
         else:
@@ -359,13 +361,12 @@ class SAR_Indexer:
 
         for field in multifield:
             for key in self.index[field]:
-                for i in range(len(key)+1):
-                    permutem = key[:i]+"$"+key[i:]
-                    if permutem not in self.ptindex[field]:
-                        self.ptindex[field][permutem] = [permutem]
-                    else:
-                        if key not in self.ptindex[field][permutem]:
-                            self.ptindex[field][permutem] += [permutem]
+                key2 = key + '$'
+                permutaciones = [key2[i:] + key2[:i] for i in range(len(key2))]
+                for perm in permutaciones:
+                    self.ptindex[field][perm] = key
+            #self.ptindex[field] = sorted(self.ptindex[field])        
+                    
                             
 
     def show_stats(self):
@@ -603,14 +604,18 @@ class SAR_Indexer:
         NECESARIO PARA TODAS LAS VERSIONES
 
         """
+        if "?" in term or "*" in term:  # si hay comodines en la consulta
+            self.use_permuterm= True
+        else : 
+            self.use_permuterm = False
         if (self.use_stemming):
             if(field is None):                    #si no se especifica field buscamos en el diccionario donde solo estan los terminos
                 return self.get_stemming(term)
             else:                     
                 return self.get_stemming(term, field)
         elif(self.use_permuterm):
-            if(field is None):                     #si no se especifica field buscamos en el diccionario donde solo estan los terminos
-                return self.get_permuterm(term)
+            if(field is None):   
+                return self.get_permuterm(term,"all") #si no se especifica field buscamos en el diccionario donde solo estan los terminos
             else:                       
                 return self.get_permuterm(term, field) 
         elif(self.use_positional):
@@ -738,22 +743,49 @@ class SAR_Indexer:
         ##################################################
         ## COMPLETAR PARA FUNCIONALIDAD EXTRA PERMUTERM ##
         ##################################################
-
-        res=set()
-        term = term.lower()  # Convertimos el término a minúsculas
-        term += "$"  # Agregamos $ al final
-
-        for i in range(len(term)):
-            res.add(term[i:] + term[:i])  # Ahora vamos pasando por cada posicion de term y vamos rotandolo y guardándolo en res
+        if not self.use_permuterm:
+            raise ValueError("El índice permuterm no ha sido creado. Llame a make_permuterm() primero.")
         
-        res_posting = []
-        for i in res:
-            if i in self.ptindex:
-                res_posting.append(self.ptindex[i])
+        if field not in self.ptindex:
+            raise ValueError(f"El campo '{field}' no existe en el índice permuterm.")
+        
+        term = str(term)
+        term = term.lower()
+        if "?" in term: 
+            pre = term.split('?')[0]
+            post = term.split('?')[1]
+        elif "*" in term:
+            pre = term.split('*')[0]
+            post = term.split('*')[1]
 
-        return res_posting
+        results = []
+        
+        for perm in self.ptindex[field]:
+            preP = perm.split('$')[0]
+            postP = perm.split('$')[1]
+            if "?" in term:
+                if postP.startswith(pre) and preP.endswith(post):
+                    perm2=perm.replace('$','')  
+                    if len(term) == len(perm2):  
+                        results.append(perm)       
+            elif "*" in term:
+                if postP.startswith(pre) and preP.endswith(post):
+                    results.append(perm) 
+        
+        posting_list = []
+        for term in results:
+            if self.ptindex[field].get(term) not in posting_list:
+                posting_list.append(self.ptindex[field].get(term))
+
+        posting_list= self.or_posting(posting_list, posting_list)
+        real_posting_list = []  
+        for term in posting_list:
+            print(term)
+            real_posting_list = self.or_posting(real_posting_list,self.index[field].get(term))
 
 
+        return real_posting_list  # Eliminar duplicados
+    
     def reverse_posting(self, p:list):
         """
         NECESARIO PARA TODAS LAS VERSIONES
@@ -926,11 +958,38 @@ class SAR_Indexer:
         for i, res in enumerate(r, 1):
             aux = self.articles[res][1]
 
-            if self.show_snippet:
-                print(" ")
-            else:
-                print('#{:<4} ({})'.format(
+            print('#{:<4} ({})'.format(
                     i, res, aux))
+            if(self.show_snippet):
+                text = ""
+                
+                tokens = re.split(r'(\bAND\b|\bOR\b|\bNOT\b|\bAND NOT\b|\bOR NOT\b)', query)
+                tokens = [token.strip() for token in tokens if token.strip()]                     #dejamos solo las palabras clave de la query
+
+                line = self.articles[res][1]           #accedemos al segundo elemento de la tupla del articulo (la linea) !POSIBLE CAMBIO LINEA 875
+                docpath  = self.docs[aux]
+                with open (docpath,'r') as file:              #para leer el texto del articulo sacamos el path del doc que lo contiene y hacemos dicc con el que sacamos su cuerpo
+                    for j,article in enumerate(file):          #vamos recorriendo las lineas (articulos) del doc. cuando sea la del nuestro parseamos ese articulo
+                        if(line == j):
+                            cuerpo = self.parse_article(article)["summary"]               #cuando ya tenemos la linea del articulo en el docid sacamos todo el texto con el parse.article
+                for palabra in tokens: 
+                    snippet = ""                                          #para cada palabra de la query buscamos su primera ocurrencia 
+                    indice = cuerpo.find(palabra)
+                    if indice != 0:
+                        inicio = max(0,indice-5)        #añadimos 5 palabras por delante y 5 por detras de contexto. PARA CAMBIAR CONTEXTO CAMBIAR 5 POR OTRO
+                    else:
+                        inicio = indice
+                    
+                    if indice != len(cuerpo):                 #CAMBIAR
+                        final = min(len(cuerpo),indice + len(palabra) + 5)    #CAMBIAR?
+                    else:
+                        final = indice
+                    snippet = cuerpo[inicio:final] 
+                text += snippet + "... " 
+        
+
+
+
             if not self.show_all and i >= self.SHOW_MAX:
                 break
         print("========================================")
