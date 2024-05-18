@@ -57,9 +57,6 @@ class SAR_Indexer:
         self.use_ranking = False  # valor por defecto, se cambia con self.set_ranking()
         # añadimos contadores que nos ayudarán a imprimir por pantalla los stats de la indexación
         self.counterFiles = 0
-        self.use_positional = False
-        self.use_permuterm = False
-       
 
 
     ###############################
@@ -177,21 +174,17 @@ class SAR_Indexer:
         self.permuterm = args['permuterm']
 
         file_or_dir = Path(root)
-        print(file_or_dir)
         
         if file_or_dir.is_file():
             # is a file
-            print("File")
             self.index_file(root)
             self.counterFiles += 1
         elif file_or_dir.is_dir():
             # is a directory
-            print("directorio")
             for d, _, files in os.walk(root):
                 for filename in files:
                     if filename.endswith('.json'):
                         fullname = os.path.join(d, filename)
-                        print(fullname)
                         self.index_file(fullname)
                         self.counterFiles += 1
             print(self.docs)
@@ -279,7 +272,6 @@ class SAR_Indexer:
                         for term in txt:                                                   #asociamos una lista a cada término
                             if term not in self.index[field]:
                                 self.index[field][term] = []
-                            #for term in txt:
                             if artid not in self.index[field][term]: 
                                 self.index[field][term].append(artid)
         
@@ -372,8 +364,6 @@ class SAR_Indexer:
                 permutaciones = [key2[i:] + key2[:i] for i in range(len(key2))]
                 for perm in permutaciones:
                     self.ptindex[field][perm] = key
-            #self.ptindex[field] = sorted(self.ptindex[field])        
-                    
                             
 
     def show_stats(self):
@@ -465,48 +455,46 @@ class SAR_Indexer:
         if query is None or len(query) == 0:
             return []
         else:
-            # en nuestra implementación ignoramos los ""
-            query = query.replace('"', '')
             # Tokenizamos las keywords y los paréntesis de la frase
-            tokenList = re.split(r'\bAND\b|\bOR\b|\bAND NOT\b|\bOR NOT\b|\bNOT\b|[()]|\btitle:\b|\bsummary:\b|\bsection-name:\b', query)
+            tokenList = re.split(r'AND|OR|AND NOT|OR NOT|NOT|[()]|url:|title:|summary:|section-name:|all:', query)
             tokenList = [re.sub(r'^\s+|\s+$', '', token) for token in tokenList if token.strip()]
 
-            separators = re.findall(r'\bAND\b|\bOR\b|\bAND NOT\b|\bOR NOT\b|\bNOT\b|[()]', query)
+            separators = re.findall(r'AND|OR|AND NOT|OR NOT|NOT|[()]', query)
             separators = [token for token in separators if token.strip()]
 
-            fields = re.findall(r'\btitle:\b|\bsummary:\b|\bsection-name:\b', query)
+            fields = re.findall(r'url:|all:|title:|summary:|section-name:', query)
             fields = [token for token in fields if token.strip()]
             #fields = [field.replace(':', '') for field in fields]
 
             # Luego juntamos listas de separador y tokens
             tokenizedList = []
             
-            i = 0; j = 0;k=0; word = ""
+            i = 0; j = 0; k = 0; word = ""
             for letter in query:
                 word += letter
                 if(i < len(tokenList) and re.sub(r'^\s+|\s+$', '', word) == tokenList[i]): 
-                    tokenizedList.append(tokenList[i]); word = ""; i+= 1; 
+                    tokenizedList.append(tokenList[i]); word = ""; i+= 1 
                 if(j < len(separators) and re.sub(r'^\s+|\s+$', '', word) == separators[j]): 
                     tokenizedList.append(separators[j]); word = ""; j+= 1
                 if(k < len(fields) and re.sub(r'^\s+|\s+$', '', word) == fields[k]): 
                     tokenizedList.append(fields[k]); word = ""; k+= 1    
 
-               
-
             fields = []
             for i, t in enumerate(tokenizedList):
-                if t in ['title:', 'summary:', 'section-name:']:
+                # Hemos de convertir a lista todos los diccionarios posicionales (cuando se utiliza la opción 
+                # -P para generar el binario de búsqueda esto es necesario para evitar una excepción)
+                if isinstance(tokenizedList[i], dict): tokenizedList[i] = [key for key in tokenizedList[i]]
+                if t in ['title:', 'summary:', 'section-name:', 'all:', 'url:']:
                     fields.append(t)
-                if t not in ['(', "OR NOT", "AND NOT", "AND", "OR", 'NOT', ')', 'title:', 'summary:', 'section-name:']:
-                    if len(fields)==0:
+                if t not in ['(', "OR NOT", "AND NOT", "AND", "OR", 'NOT', ')', 'url:', 'all:', 'title:', 'summary:', 'section-name:']:
+                    if len(fields)==0: 
                         tokenizedList[i] = self.get_posting_or_positionals(t,None)
                     else:
                         tokenizedList[i] = self.get_posting_or_positionals(t, fields[0].replace(':', ''))
                         fields.pop(0)
-                    # Hemos de convertir a lista todos los diccionarios posicionales (cuando se utiliza la opción 
-                    # -P para generar el binario de búsqueda esto es necesario para evitar una excepción)
-                    if isinstance(tokenizedList[i], dict): tokenizedList[i] = [key for key in tokenizedList[i]]
-            tokenizedList = [t for t in tokenizedList if t not in ['title:', 'summary:', 'section-name:']]
+
+            tokenizedList = [t for t in tokenizedList if t not in ['all:','title:','summary:', 'section-name:']]
+
             # añadimos paréntesis tanto al final como al principio para que la implementación funcione correctamente
             # es necesario porque cuando se evaluan todas las operaciones nesteadas por paréntesis de niveles más altos
             # falta por tratar el nivel más bajo, el cual no es accesible si la query no está envuelta en paréntesis.
@@ -571,14 +559,8 @@ class SAR_Indexer:
                 i += 1
         return posting_list
 
-    # Método auxiliar para los posting, para los stemming ó para las consultas normales (falta permuterm)
+    # Método auxiliar para los posting, para los stemming ó para las consultas normales
     def get_posting_or_positionals(self, token,field):
-        if ' ' in token:
-            self.use_positional = True
-            self.use_stemming = False
-        else:
-            self.use_positional = False 
-        
         if self.get_posting(token, field) == None: return []
         return self.get_posting(token, field)
 
@@ -614,22 +596,25 @@ class SAR_Indexer:
         if "?" in term or "*" in term:  # si hay comodines en la consulta
             self.use_permuterm= True
         else : 
-            self.use_permuterm = False
-        if (self.use_stemming):
-            if(field is None):                    #si no se especifica field buscamos en el diccionario donde solo estan los terminos
-                return self.get_stemming(term)
-            else:                     
-                return self.get_stemming(term, field)
+            self.use_permuterm= False
+            
+        if '"' in term:
+            # en nuestra implementación ignoramos los ""
+            term = term.replace('"', '')
+            if(field is None):                       #si no se especifica field buscamos en el diccionario donde solo estan los terminos
+                return self.get_positionals(term)
+            else:                          
+                return self.get_positionals(term, field) 
         elif(self.use_permuterm):
             if(field is None):   
                 return self.get_permuterm(term,"all") #si no se especifica field buscamos en el diccionario donde solo estan los terminos
             else:                       
                 return self.get_permuterm(term, field) 
-        elif(self.use_positional):
-            if(field is None):                       #si no se especifica field buscamos en el diccionario donde solo estan los terminos
-                return self.get_positionals(term)
-            else:                          
-                return self.get_positionals(term, field) 
+        elif (self.use_stemming):
+            if(field is None):                    #si no se especifica field buscamos en el diccionario donde solo estan los terminos
+                return self.get_stemming(term)
+            else:                     
+                return self.get_stemming(term, field)
         else:
             if(field is None):
                 return self.index["all"].get(term)
@@ -663,7 +648,8 @@ class SAR_Indexer:
 
         for term in terms:
             if term != " ":
-                postingDictList.append(self.index[f][term])    # guardamos en la lista de diccionarios las posting lists de los términos
+                if term in self.index[f]:
+                    postingDictList.append(self.index[f][term])    # guardamos en la lista de diccionarios las posting lists de los términos
             
         groupDict={}
         # Ahora creamos un nuevo diccionario que almacene todos los artid con sus respectivos
@@ -690,7 +676,7 @@ class SAR_Indexer:
                 if pos == postingList[-1]:
                     break
                 # comprobamos si la palabra que estamos buscando está en el artículo
-                if self.index[f][terms[count]].get(artid) is not None:
+                if terms[count] in self.index[f] and artid in self.index[f][terms[count]]:
                 # tenemos que asegurarnos que la palabra que estamos consultando es la que sigue el orden dictado
                 # por los términos. Primero se busca term[0], luego term[1]... etc. La disposición de nuestro código
                 # no asegura esto por defecto, y por ello debe comprobarse que la posición siendo consultada
@@ -701,7 +687,6 @@ class SAR_Indexer:
                         count = 0
                 else:
                     count = 0
-
         return posting                    
 
 
@@ -718,7 +703,6 @@ class SAR_Indexer:
 
         """
         stem = self.stemmer.stem(term)
-        print(stem)
         res = []
         if field is not None:
             if stem in self.sindex[field]:
@@ -747,9 +731,6 @@ class SAR_Indexer:
         return: posting list
 
         """
-        ##################################################
-        ## COMPLETAR PARA FUNCIONALIDAD EXTRA PERMUTERM ##
-        ##################################################
         if not self.use_permuterm:
             raise ValueError("El índice permuterm no ha sido creado. Llame a make_permuterm() primero.")
         
@@ -787,7 +768,6 @@ class SAR_Indexer:
         posting_list= self.or_posting(posting_list, posting_list)
         real_posting_list = []  
         for term in posting_list:
-            print(term)
             real_posting_list = self.or_posting(real_posting_list,self.index[field].get(term))
 
 
@@ -944,8 +924,6 @@ class SAR_Indexer:
                 else:
                     print(f'>>>>{query}\t{reference} != {result}<<<<')
                     errors = True                    
-            else:
-                print(query)
         return not errors
 
 
@@ -961,7 +939,9 @@ class SAR_Indexer:
 
         """
         r = self.solve_query(query)
+
         print("========================================")
+
         for i, res in enumerate(r, 1):
             aux = self.articles[res][0]
 
@@ -970,70 +950,55 @@ class SAR_Indexer:
             
             line = self.articles[res][1]           #accedemos al segundo elemento de la tupla del articulo (docid, linea) !POSIBLE CAMBIO LINEA  aux = self.articles[res][1]
             docpath  = self.docs[aux-1]              #aux == docid       res = artid
-                
-                
-            
+            sec_names = []
+            txt_secs = '' 
             with open (docpath,'rb') as file:              #para leer el texto del articulo sacamos el path del doc que lo contiene y hacemos dicc con el que sacamos su cuerpo
-                for j,article in enumerate(file):          #vamos recorriendo las lineas (articulos) del doc. cuando sea la del nuestro parseamos ese articulo
+                for j, art in enumerate(file):          #vamos recorriendo las lineas (articulos) del doc. cuando sea la del nuestro parseamos ese articulo
                     if(line == j):
-                        art = json.loads(article)
-                        secciones = art['sections']               #cuando ya tenemos la linea del articulo en el docid sacamos todo el texto con el parse.article
-                        url = art['url']
-                        title = art['title']
-            print(title)
-            print(url)
-            
+                        article = json.loads(art)
+                        for sec in article['sections']:
+                            txt_secs += sec['name'] + '\n' + sec['text'] + '\n'
+                            txt_secs += '\n'.join(subsec['name'] + '\n' + subsec['text'] + '\n' for subsec in sec['subsections']) + '\n\n'
+                            sec_names.append(sec['name'])
+                            sec_names.extend(subsec['name'] for subsec in sec['subsections'])
+                        article.pop('sections') # no la necesitamos 
+                        article['all'] = article['title'] + '\n\n' + article['summary'] + '\n\n' + txt_secs
+                        article['section-name'] = '\n'.join(sec_names)
+
+            print(article['title'])
+            print(article['url'])
             
             if(self.show_snippet):
                 snippets = ""
                 
-                tokens = re.split(r'(\bAND\b|\bOR\b|\bNOT\b|\bAND NOT\b|\bOR NOT\b)', query)
+                tokens = re.split(r'AND|OR|NOT|AND NOT|OR NOT', query)
                 tokens = [token.strip() for token in tokens if token.strip()]                     
                 tokens = [token.strip() for token in tokens if token.strip() and token.strip() not in {'AND', 'OR', 'NOT', 'AND NOT', 'OR NOT'}] #dejamos solo las palabras clave de la query
                 cuerpo = ""
+                cuerpo += article['all']
                 
+                cuerpo = cuerpo.replace('\n', ' ').replace('\r', '')
                 
-                for text in secciones:
-                    cuerpo += text['text'] + " "
-                    for subtext in text['subsections']:
-                        cuerpo += subtext['text'] + " "
-                
+                for j, palabra in enumerate(tokens):
+                    palabra = palabra.replace('"', '')
+                    indice = (cuerpo.lower()).find(palabra)
+                    
+                    inicio = max(0,indice-100)
+                    final = min(len(cuerpo),indice + 100)    
+                    
+                    snippet = cuerpo[inicio:final]
+                    
+                    snippets += snippet + "..."
 
-                texto_seprado = re.findall(r'\b\w+\b|[^\w\s]', cuerpo) 
+                snippets = "..." + snippets[1:] # Hay un espacio, lo eliminamos con [1:]
+                print(snippets+"\n")
                 
-                
-                for j, palabra in enumerate(tokens): 
-                    snippet = ""                                          #para cada palabra de la query buscamos su primera ocurrencia 
-                    indice = texto_seprado.index(palabra)
-                    
-                    
-                    inicio = max(0,indice-5)        #añadimos 5 palabras por delante y 5 por detras de contexto. PARA CAMBIAR CONTEXTO CAMBIAR 5 POR OTRO
-                    
-                    final = min(len(texto_seprado),indice + 5)    
-                    
-                    snippet = texto_seprado[inicio:final]
-                    
-                    res = []
-                    for i, elem in enumerate(snippet):
-                        if i > 0:
-                            if (snippet[i-1].isalnum() and elem.isalnum()):
-                                res.append(' ')
-
-                            elif (snippet[i-1] in ".,;:!?") and elem.isalnum():
-                                res.append(' ')
-                            res.append(elem)
-                                                                   #en este bucle for eliminamos los espacios entre 'palabra' y 'signo de puntuación'
-                    
-                    snippet = ''.join(res)
-                    snippets += snippet + " ... " 
-                snippets = "... " + snippets
-                print(snippets)
-                 
             if not self.show_all and i >= self.SHOW_MAX:
                 break
         
         print("========================================")
         print('Number of results: ' + str(len(r)))
+        print()
         return str(len(r))
     
 
