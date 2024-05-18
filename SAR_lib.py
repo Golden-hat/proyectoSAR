@@ -1029,11 +1029,6 @@ class SAR_Indexer:
                 snippets = "... " + snippets
                 print(snippets)
                  
-                    
-        
-
-
-
             if not self.show_all and i >= self.SHOW_MAX:
                 break
         
