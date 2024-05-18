@@ -187,7 +187,6 @@ class SAR_Indexer:
                         fullname = os.path.join(d, filename)
                         self.index_file(fullname)
                         self.counterFiles += 1
-            print(self.docs)
         else:
             print(f"ERROR:{root} is not a file nor directory!", file=sys.stderr)
             sys.exit(-1)
